@@ -3,6 +3,25 @@ from headers import *
 ##################################################################################
 ##################################################################################
 
+# meant to replace catalog object
+class TableReader(object):
+    
+    def __init__(self, table):
+        self.table = table
+
+        self.read_table(nObj=nObj)
+        
+
+    def read_table(self, nObj=None):
+        print("- load full table")
+        data = self.table
+        self.nObj = len(data)
+        #
+        # sky coordinates and redshift
+        
+        self.RA = np.array(data['RA']) # [deg]
+        self.DEC = np.array(data['DEC'])   # [deg]
+        self.Z = np.array(data['Z'])
 
 class ThumbStack(object):
 
