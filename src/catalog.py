@@ -5,11 +5,10 @@ from headers import *
 
 class Catalog(object):
 
-   def __init__(self, U, MassConversion, name="test", nameLong=None, pathInCatalog="", rV=1.,  save=False, nObj=None):
+   def __init__(self, MassConversion, name="test", nameLong=None, pathInCatalog="", rV=1.,  save=False, nObj=None):
       '''nObj: used to keep the first nObj objects of the catalog, useful for quick debugging
       '''
 
-      self.U = U
       self.MassConversion = MassConversion
       self.name = name
       self.rV = rV   # velocity real-space correlation coefficient
@@ -61,7 +60,7 @@ class Catalog(object):
       copyfile(self.pathOutCatalog, newPathOutCatalog)
       
       # Then copy the catalog properties
-      newCat = Catalog(self.U, self.MassConversion, name=name, nameLong=nameLong, pathInCatalog=self.pathInCatalog, save=False)
+      newCat = Catalog(self.MassConversion, name=name, nameLong=nameLong, pathInCatalog=self.pathInCatalog, save=False)
       return newCat
 
 
@@ -81,7 +80,7 @@ class Catalog(object):
       # save it to new catalog path
       np.savetxt(newPathOutCatalog, data)
       # Then copy the catalog properties
-      newCat = Catalog(self.U, self.MassConversion, name=name, nameLong=nameLong, pathInCatalog=self.pathInCatalog, save=False)
+      newCat = Catalog(self.MassConversion, name=name, nameLong=nameLong, pathInCatalog=self.pathInCatalog, save=False)
       return newCat
 
 
@@ -170,7 +169,7 @@ class Catalog(object):
       print("- add integrated tau")
       # convert from total mass to baryon mass
       # assuming cosmological abundance of baryons, and all baryons are in gas
-      self.integratedTau = self.Mvir * self.U.bg.Omega0_b/self.U.bg.Omega0_m
+      self.integratedTau = self.Mvir*0
       
       # convert from total baryon mass to electron total number
       me = 9.10938291e-31  # electron mass (kg)
@@ -186,10 +185,7 @@ class Catalog(object):
       # multiply by Thomson cross section (physical)
       mpc = 3.08567758e16*1.e6   # 1Mpc in m
       sigma_T = 6.6524e-29 # Thomson cross section in m^2
-      self.integratedTau *= sigma_T / (mpc / self.U.bg.h)**2
-      
-      # divide by (a chi)^2
-      self.integratedTau /= (self.U.bg.comoving_distance(self.Z) / (1.+self.Z))**2
+      self.integratedTau *= sigma_T
 
    
    def addIntegratedKSZ(self):
@@ -210,14 +206,8 @@ class Catalog(object):
       
       # in arcmin^2
       yCcyltilda = (self.Mstellar/1.e11)**3.2 * 1.e-6
-
-      # in arcmin^2
-      yCcyl = yCcyltilda * (self.U.hubble(self.Z) / self.U.hubble(0.))**(2./3.)
-      yCcyl /= (self.U.bg.comoving_distance(self.Z) / (500.*self.U.bg.h))**2
-      # in sr
-      yCcyl *= (np.pi/180./60.)**2
       
-      self.integratedY = yCcyl
+      self.integratedY = np.zeros_like(self.Z)
 
 
    ##################################################################################
@@ -755,7 +745,7 @@ class Catalog(object):
       comparison between using median z or z-distribution
       """
       # interpolate RMS 1d velocity for speed
-      f = lambda z: self.U.v3dRms(0., z, W3d_sth) / np.sqrt(3.)
+      f = lambda z: z / np.sqrt(3.)
       Z = np.linspace(0., 1., 201)
       V1dRms = np.array(list(map(f, Z)))
       f = interp1d(Z, V1dRms, kind='linear', bounds_error=False, fill_value='extrapolate')
@@ -767,154 +757,6 @@ class Catalog(object):
 
 
    ##################################################################################
-   ##################################################################################
-
-
-   def plotHistograms(self):
-      z0 = np.mean(self.Z)
-      s2v1d = self.U.v3dRms(0., z0, W3d_sth)**2 / 3.
-      
-      # redshifts
-      path = self.pathFig+"/hist_z.pdf"
-      myHistogram(self.Z, nBins=71, lim=(0., 1.), path=path, nameLatex=r'$z$', semilogy=True)
-      
-      # spherical velocities
-      path = self.pathFig+"/hist_vr.pdf"
-      myHistogram(self.vR, nBins=71, lim=(-1000., 1000.), S2Theory=[s2v1d], path=path, nameLatex=r'$v_r$ [km/s]', doGauss=True)
-      path = self.pathFig+"/hist_vtheta.pdf"
-      myHistogram(self.vTheta, nBins=71, lim=(-1000., 1000.), S2Theory=[s2v1d], path=path, nameLatex=r'$v_\theta$ [km/s]', doGauss=True)
-      path = self.pathFig+"/hist_vphi.pdf"
-      myHistogram(self.vPhi, nBins=71, lim=(-1000., 1000.), S2Theory=[s2v1d], path=path, nameLatex=r'$v_\phi$ [km/s]', doGauss=True)
-      
-      # cartesian velocities
-      path = self.pathFig+"/hist_vx.pdf"
-      myHistogram(self.vX, nBins=71, lim=(-1000., 1000.), S2Theory=[s2v1d], path=path, nameLatex=r'$v_x$ [km/s]', doGauss=True)
-      path = self.pathFig+"/hist_vy.pdf"
-      myHistogram(self.vY, nBins=71, lim=(-1000., 1000.), S2Theory=[s2v1d], path=path, nameLatex=r'$v_y$ [km/s]', doGauss=True)
-      path = self.pathFig+"/hist_vz.pdf"
-      myHistogram(self.vZ, nBins=71, lim=(-1000., 1000.), S2Theory=[s2v1d], path=path, nameLatex=r'$v_z$ [km/s]', doGauss=True)
-      
-      # stellar masses
-      path = self.pathFig+"/hist_mstellar.pdf"
-      myHistogram(self.Mstellar, nBins=71, path=path, nameLatex=r'$M_\star$ [M$_\odot$]', semilogx=True, semilogy=True)
-
-      # virial masses
-      path = self.pathFig+"/hist_mvir.pdf"
-      myHistogram(self.Mvir, nBins=71, path=path, nameLatex=r'$M_\text{vir}$ [M$_\odot$]', semilogx=True, semilogy=True)
-      
-      # comoving virial radius
-      # need masses in Msun/h
-      Par = list(zip(self.Mvir*self.U.bg.h, self.Z))
-      f = lambda par: self.U.frvir(par[0], par[1])   # in: Msun/h, out: Mpc/h
-      Rvir = np.array(list(map(f, Par)))  # in Mpc/h
-      #Rvir /= self.U.bg.h  # Mpc
-      path = self.pathFig+"/hist_rvir.pdf"
-      myHistogram(Rvir/self.U.bg.h, nBins=71, path=path, nameLatex=r'$R_\text{vir}$ [Mpc]', semilogx=True, semilogy=True)
-      
-      # virial angular radius
-      Chi = np.array(list(map(self.U.bg.comoving_distance, self.Z))) # [Mpc/h]
-      Thetavir = Rvir / Chi   # [rad]
-      path = self.pathFig+"/hist_thetavir.pdf"
-      x = Thetavir * (180.*60./np.pi)  # [arcmin]
-      myHistogram(x, nBins=71, path=path, nameLatex=r'$\theta_\text{vir}$ [arcmin]', semilogx=True, semilogy=True)
-      
-      # integrated tau [arcmin^2]
-      path = self.pathFig+"/hist_integratedtau.pdf"
-      x = self.integratedTau * (180.*60./np.pi)**2 # [arcmin^2]
-      myHistogram(x, nBins=71, path=path, nameLatex=r'$\int d^2\theta \; \tau$ [arcmin$^2$]', semilogx=True, semilogy=True)
-      
-      # mean tau within Rvir [dimless]
-      path = self.pathFig+"/hist_meantauvir.pdf"
-      x = self.integratedTau / (np.pi * Thetavir**2) # [dimless]
-      myHistogram(x, nBins=71, path=path, nameLatex=r'$\int d^2\theta \; \tau / \left( \pi \theta_\text{vir} \right)$ [dimless]', semilogx=True, semilogy=True)
-
-      # expected kSZ [muK*arcmin^2]
-      path = self.pathFig+"/hist_ksz.pdf"
-      x = self.integratedKSZ * (180.*60./np.pi)**2 # [muK*arcmin^2]
-      myHistogram(x, nBins=71, path=path, nameLatex=r'$\int d^2\theta \; \delta T_\text{kSZ}$ [$\mu$K.arcmin$^2$]', doGauss=True, semilogy=True)
-
-      # mean kSZ within Rvir [muK]
-      path = self.pathFig+"/hist_meankszvir.pdf"
-      x = self.integratedKSZ / (np.pi * Thetavir**2) # [muK]
-      myHistogram(x, nBins=71, path=path, nameLatex=r'$\int d^2\theta \; \delta T_\text{kSZ} / \left( \pi \theta_\text{vir} \right)$ [$\mu$K]', doGauss=True, semilogy=True)
-
-      # expected Y [arcmin^2]
-      path = self.pathFig+"/hist_y.pdf"
-      x = self.integratedY * (180.*60./np.pi)**2 # [arcmin^2]
-      myHistogram(x, nBins=71, path=path, nameLatex=r'$\int d^2\theta \; y_\text{tSZ}$ [arcmin$^2$]', semilogx=True, semilogy=True)
-
-      # mean Y within Rvir [dimless]
-      path = self.pathFig+"/hist_meanyvir.pdf"
-      x = self.integratedY / (np.pi * Thetavir**2) # [dimless]
-      myHistogram(x, nBins=71, path=path, nameLatex=r'$\int d^2\theta \; y_\text{tSZ} / \left( \pi \theta_\text{vir} \right)$ [dimless]', semilogx=True, semilogy=True)
-
-
-      # displacements?
-      # displacements?
-
-
-##################################################################################
-##################################################################################
-
-
-#   def generateMockMaps(self, carMap, sigma=None, depixwin=False, test=False):
-#      print "- Generate mock maps"
-#      # map of pixel areas
-#      pixSizeMap = carMap.pixsizemap()
-#      # input for the counts
-#      srcsCount = np.zeros((self.nObj, 3))
-#      srcsCount[:,0] = self.DEC.copy() * np.pi/180.   # [rad]
-#      srcsCount[:,1] = self.RA.copy() * np.pi/180. # [rad]
-#      srcsCount[:,2] = 1.
-#      # input for the LOS velocity
-#      srcsVel = srcsCount.copy()
-#      srcsVel[:,2] = - self.vR / 3.e5 
-#
-#      import pointsrcs
-#
-#      # Dirac profiles
-#      countDirac = pointsrcs.sim_srcs(carMap.shape, carMap.wcs, srcsCount, 1.e-5*np.pi/(180.*60.))
-#      print(np.sum(np.abs(countDirac)))
-#      velDirac = pointsrcs.sim_srcs(carMap.shape, carMap.wcs, srcsVel, 1.e-5*np.pi/(180.*60.))
-#      # normalize to integrate to 1 over angles in [muK*arcmin^2]
-#      countDirac /= pixSizeMap * (180.*60./np.pi)**2 # divide by pixel area in arcmin^2 
-#      velDirac /= pixSizeMap * (180.*60./np.pi)**2 # divide by pixel area in arcmin^2 
-#      # normalize the mock maps, such that:
-#      # int dOmega count = 1 [muK*arcmin^2]
-#      # int dOmega vel = -(v/c) * sigma(v/c) [muK*arcmin^2]
-#      # the reason for the vel normalization is that the kSZ estimator correlates with v/c,
-#      # then divides by sigma^2(v/c), then re-multiplies by sigma(v/c),
-#      # so that the estimated kSZ has the right amplitude.
-#      # This way, the estimated tSZ and kSZ should converge to 1 muK*arcmin^2,
-#      # and will be easily comparable to the theory curve.
-#      velDirac /= np.std(self.vR / 3.e5)
-#      # save the maps
-#      enmap.write_map(self.pathOut+"mock_count_dirac_car.fits", countDirac)
-#      enmap.write_map(self.pathOut+"mock_vel_dirac_car.fits", velDirac)
-#      
-#      if sigma is not None:
-#         countGauss = pointsrcs.sim_srcs(carMap.shape, carMap.wcs, srcsCount, sigma*np.pi/(180.*60.))
-#         print(np.sum(np.abs(countGauss)))
-#         velGauss = pointsrcs.sim_srcs(carMap.shape, carMap.wcs, srcsVel, sigma*np.pi/(180.*60.))
-#         # normalize to integrate to 1 over angles in [muK*arcmin^2]
-#         countGauss /= pixSizeMap * (180.*60./np.pi)**2 # divide by pixel area in arcmin^2 
-#         velGauss /= pixSizeMap * (180.*60./np.pi)**2 # divide by pixel area in arcmin^2 
-#         # The amplitude given to the Gaussian was the peak amplitude:
-#         # convert from peak amplitude to Gaussian normalization
-#         countGauss /= 2. * np.pi * (sigma * np.pi / (180. * 60.))**2
-#         velGauss /= 2. * np.pi * (sigma * np.pi / (180. * 60.))**2
-#         # normalize the mock maps, such that:
-#         # int dOmega count = 1 [muK*arcmin^2]
-#         # int dOmega vel = -(v/c) * sigma(v/c) [muK*arcmin^2]
-#         # the reason for the vel normalization is that the kSZ estimator correlates with v/c,
-#         # then divides by sigma^2(v/c), then re-multiplies by sigma(v/c),
-#         # so that the estimated kSZ has the right amplitude.
-#         # This way, the estimated tSZ and kSZ should converge to 1 muK*arcmin^2,
-#         # and will be easily comparable to the theory curve.
-#         velGauss /= np.std(self.vR / 3.e5)
-#         # save the maps
-#         enmap.write_map(self.pathOut+"mock_count_gauss_car.fits", countGauss)
-#         enmap.write_map(self.pathOut+"mock_vel_gauss_car.fits", velGauss)
 
 
 
