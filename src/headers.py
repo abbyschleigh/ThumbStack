@@ -61,8 +61,8 @@ pyfftw.interfaces.cache.enable() # so subsequent FFTs use the wisdom from the fi
 #from classy import Class
 
 # http://classylss.readthedocs.io/en/stable/index.html
-import classylss
-import classylss.binding as CLASS
+#import classylss
+#import classylss.binding as CLASS
 
 import healpy as hp
 

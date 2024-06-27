@@ -7,10 +7,9 @@ from headers import *
 class ThumbStack(object):
 
     #   def __init__(self, U, Catalog, pathMap="", pathMask="", pathHit="", name="test", nameLong=None, save=False, nProc=1):
-    def __init__(self, U, Catalog, cmbMap, cmbMask, cmbHit=None, name="test", nameLong=None, save=False, nProc=1, filterTypes='diskring', doStackedMap=False, doMBins=False, doVShuffle=False, doBootstrap=False, cmbNu=150.e9, cmbUnitLatex=r'$\mu$K', pathOut='/pscratch/sd/r/rhliu/projects/ThumbStack/', rApMinArcmin=2., rApMaxArcmin=6., rApInnerRad=1.):
+    def __init__(self, Catalog, cmbMap, cmbMask, cmbHit=None, name="test", nameLong=None, save=False, nProc=1, filterTypes='diskring', doStackedMap=False, doMBins=False, doVShuffle=False, doBootstrap=False, cmbNu=150.e9, cmbUnitLatex=r'$\mu$K', pathOut='/pscratch/sd/r/rhliu/projects/ThumbStack/', rApMinArcmin=2., rApMaxArcmin=6., rApInnerRad=1.):
 
         self.nProc = nProc
-        self.U = U
         self.Catalog = Catalog
         self.name = name
         if nameLong is None:
