@@ -226,10 +226,10 @@ class ThumbStack(object):
             ra = self.Catalog.RA[iObj]
             dec = self.Catalog.DEC[iObj]
             hit = self.sky2map(ra, dec, self.cmbMask)
-            return np.float(hit > thresh)
+            return float(hit > thresh)
 
         tStart = time()
-        with sharedmem.MapReduce(np=nProc) as pool:
+        with sharedmem.MapReduceByThread(np=nProc) as pool:
             overlapFlag = np.array(
                 pool.map(foverlap, list(range(self.Catalog.nObj))))
         tStop = time()
@@ -546,7 +546,7 @@ class ThumbStack(object):
         print("Evaluate all filters on all objects")
         # loop over all objects in catalog
         tStart = time()
-        with sharedmem.MapReduce(np=nProc) as pool:
+        with sharedmem.MapReduceByThread(np=nProc) as pool:
             def f(iObj): return self.analyzeObject(iObj, test=False)
             result = np.array(pool.map(f, list(range(self.Catalog.nObj))))
         tStop = time()
@@ -965,7 +965,7 @@ class ThumbStack(object):
                 return resMap
 
             # dispatch each chunk of objects to a different processor
-            with sharedmem.MapReduce(np=ts.nProc) as pool:
+            with sharedmem.MapReduceByThread(np=ts.nProc) as pool:
                 resMap = np.array(pool.map(stackChunk, list(range(nChunk))))
 
             # sum all the chunks
@@ -1022,7 +1022,7 @@ class ThumbStack(object):
         """
         # print("Performing", nSamples, "bootstrap resamples")
         tStart = time()
-        with sharedmem.MapReduce(np=nProc) as pool:
+        with sharedmem.MapReduceByThread(np=nProc) as pool:
             def f(iSample): return self.computeStackedProfile(
                 filterType, est, iBootstrap=iSample)
             result = np.array(pool.map(f, list(range(nSamples))))
@@ -1078,7 +1078,7 @@ class ThumbStack(object):
             jointProf = np.concatenate((prof1[0], prof2[0]))
             return jointProf
 
-        with sharedmem.MapReduce(np=nProc) as pool:
+        with sharedmem.MapReduceByThread(np=nProc) as pool:
             stackSamples = np.array(pool.map(f, list(range(nSamples))))
             # result = np.array(map(f, range(nSamples)))
         tStop = time()
@@ -1113,7 +1113,7 @@ class ThumbStack(object):
         """Estimate covariance matrix for the stacked profile from shuffling velocities
         """
         tStart = time()
-        with sharedmem.MapReduce(np=nProc) as pool:
+        with sharedmem.MapReduceByThread(np=nProc) as pool:
             def f(iSample): return self.computeStackedProfile(
                 filterType, est, iVShuffle=iSample)
             result = np.array(pool.map(f, list(range(nSamples))))
