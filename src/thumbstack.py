@@ -111,7 +111,7 @@ class ThumbStack(object):
         print("- Thumbstack: "+str(self.name))
 
         self.loadAPRadii()
-        self.loadMMaxBins()
+        #self.loadMMaxBins()
 
         if save:
             self.saveOverlapFlag(nProc=self.nProc)
