@@ -12,6 +12,12 @@ import astropy
 from pixell import enmap, enplot, reproject, utils, curvedsky 
 import numpy as np
 
+from astropy.table import Table
+import astropy
+
+from pixell import enmap, enplot, reproject, utils, curvedsky 
+import numpy as np
+
 ########################################################## cutting
 
 # description: inputs fits file, outputs astropy table with imposed constraints

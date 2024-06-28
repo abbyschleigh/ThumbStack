@@ -5,9 +5,13 @@ from headers import *
 
 # meant to replace catalog object
 class TableReader(object):
-    
-    def __init__(self, table):
+    def __init__(self, table, nObj=None, name=None):
         self.table = table
+
+        if name is None:
+            self.name='this_data'
+        else:
+            self.name=name
 
         self.read_table(nObj=nObj)
         
