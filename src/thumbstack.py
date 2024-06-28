@@ -1,3 +1,7 @@
+# Some notes for Abby
+# change pathOut to point to your local ThumbStack directory
+pathOut = 'your/path/to/ThumbStack'
+
 from headers import *
 
 ##################################################################################
@@ -29,11 +33,10 @@ class TableReader(object):
 
 class ThumbStack(object):
 
-    #   def __init__(self, U, Catalog, pathMap="", pathMask="", pathHit="", name="test", nameLong=None, save=False, nProc=1):
-    def __init__(self, Catalog, cmbMap, cmbMask, cmbHit=None, name="test", nameLong=None, save=False, nProc=1, filterTypes='diskring', doStackedMap=False, doMBins=False, doVShuffle=False, doBootstrap=False, cmbNu=150.e9, cmbUnitLatex=r'$\mu$K', pathOut='/pscratch/sd/r/rhliu/projects/ThumbStack/', rApMinArcmin=2., rApMaxArcmin=6., rApInnerRad=1.):
+    def __init__(self, table, cmbMap, cmbMask, cmbHit=None, name="test", nameLong=None, save=False, nProc=1, filterTypes='diskring', doStackedMap=False, doBootstrap=False, cmbNu=150.e9, cmbUnitLatex=r'$\mu$K', pathOut=pathOut, rApMinArcmin=2., rApMaxArcmin=6., rApInnerRad=1.):
 
         self.nProc = nProc
-        self.Catalog = Catalog
+        self.Catalog = TableReader(table,name=name) # table is assumed to be an astropy table
         self.name = name
         if nameLong is None:
             self.nameLong = self.name
@@ -42,8 +45,6 @@ class ThumbStack(object):
         self.cmbMap = cmbMap
         self.cmbMask = cmbMask
         self.cmbHit = cmbHit
-        self.doMBins = doMBins
-        self.doVShuffle = doVShuffle
         self.doBootstrap = doBootstrap
         self.cmbNu = cmbNu
         self.cmbUnitLatex = cmbUnitLatex
@@ -92,14 +93,6 @@ class ThumbStack(object):
 
         # number of samples for bootstraps, shuffles
         self.nSamples = 10000
-
-        # number of mMax cuts to test,
-        # for tSZ contamination to kSZ
-        self.nMMax = 20
-        # fiducial mass cuts, to avoid eg tSZ contamination
-        # from massive clusters
-        self.mMin = 0.  # 1.e6
-        self.mMax = np.inf  # 1.e14 # 1.e17
 
         # Output path
         self.pathOut = pathOut + "output/thumbstack/"+self.name
@@ -203,21 +196,6 @@ class ThumbStack(object):
 
         return cutoutMap
 
-    def loadMMaxBins(self, test=False):
-        '''Choose the mMax values to have the same number of galaxies
-        added in the sample for each mMax increment.
-        '''
-#      self.MMax = np.interp(np.linspace(0, self.Catalog.nObj, self.nMMax+1),
-#                           np.arange(self.Catalog.nObj),
-#                           np.sort(self.Catalog.Mvir))[1:]
-
-        self.MMax = np.logspace(np.log10(self.Catalog.Mvir.min(
-        )*1.1), np.log10(self.Catalog.Mvir.max()), self.nMMax)
-
-        if test:
-            print("Checking the mMax bins:")
-            print("number of bins:", self.nMMax, len(self.MMax))
-            print("values of mMax:", self.MMax)
 
     ##################################################################################
 
@@ -245,23 +223,16 @@ class ThumbStack(object):
         def foverlap(iObj):
             '''Returns 1. if the object overlaps with the hit map and 0. otherwise.
             '''
-            # if iObj % 100000 == 0:
-                # print("-", iObj)
             ra = self.Catalog.RA[iObj]
             dec = self.Catalog.DEC[iObj]
-            # hit = self.sky2map(ra, dec, self.cmbHit)
             hit = self.sky2map(ra, dec, self.cmbMask)
             return np.float(hit > thresh)
 
-#      overlapFlag = np.array(map(foverlap, range(self.Catalog.nObj)))
         tStart = time()
         with sharedmem.MapReduce(np=nProc) as pool:
             overlapFlag = np.array(
                 pool.map(foverlap, list(range(self.Catalog.nObj))))
         tStop = time()
-        # print("took", (tStop-tStart)/60., "min")
-        # print("Out of", self.Catalog.nObj, "objects,", np.sum(overlapFlag),
-              # "overlap, ie a fraction", np.sum(overlapFlag)/self.Catalog.nObj)
         np.savetxt(self.pathOut+"/overlap_flag.txt", overlapFlag)
 
     def loadOverlapFlag(self):
@@ -326,11 +297,6 @@ class ThumbStack(object):
         # extract the small square map by interpolating the big map
         # these are now numpy arrays: the wcs info is gone
 
-#      # Here, I use nearest neighbor interpolation (order=0)
-#      stampMap[:,:] = self.cmbMap.at(ipos, prefilter=False, mask_nan=False, order=0)
-#      stampMask[:,:] = self.cmbMask.at(ipos, prefilter=False, mask_nan=False, order=0)
-#      stampHit[:,:] = self.cmbHit.at(ipos, prefilter=False, mask_nan=False, order=0)
-
         # Here, I use bilinear interpolation
         stampMap[:, :] = self.cmbMap.at(
             ipos, prefilter=True, mask_nan=False, order=1)
@@ -339,11 +305,6 @@ class ThumbStack(object):
         if self.cmbHit is not None:
             stampHit[:, :] = self.cmbHit.at(
                 ipos, prefilter=True, mask_nan=False, order=1)
-
-#      # Here, I use bicubic spline interpolation
-#      stampMap[:,:] = self.cmbMap.at(ipos, prefilter=True, mask_nan=False, order=3)
-#      stampMask[:,:] = self.cmbMask.at(ipos, prefilter=True, mask_nan=False, order=3)
-#      stampHit[:,:] = self.cmbHit.at(ipos, prefilter=True, mask_nan=False, order=3)
 
         # re-threshold the mask map, to keep 0 and 1 only
         stampMask[:, :] = 1.*(stampMask[:, :] > 0.5)
@@ -584,7 +545,6 @@ class ThumbStack(object):
 
         print("Evaluate all filters on all objects")
         # loop over all objects in catalog
-#      result = np.array(map(self.analyzeObject, range(self.Catalog.nObj)))
         tStart = time()
         with sharedmem.MapReduce(np=nProc) as pool:
             def f(iObj): return self.analyzeObject(iObj, test=False)
@@ -630,26 +590,15 @@ class ThumbStack(object):
 
     ##################################################################################
 
-    def catalogMask(self, overlap=True, psMask=True, mVir=None, z=[0., 100.], extraSelection=1., filterType=None, outlierReject=True):
+    def catalogMask(self, overlap=True, psMask=True, extraSelection=1., filterType=None, outlierReject=True):
         '''Returns catalog mask: 1 for objects to keep, 0 for objects to discard.
         Use as:
         maskedQuantity = Quantity[mask]
         '''
-        if mVir is None:
-            mVir = [self.mMin, self.mMax]
 
         # Here mask is 1 for objects we want to keep
         mask = np.ones_like(self.Catalog.RA)
         # print("start with fraction", np.sum(mask)/len(mask), "of objects")
-        if mVir is not None:
-            mask *= (self.Catalog.Mvir >=
-                     mVir[0]) * (self.Catalog.Mvir <= mVir[1])
-            # print("keeping fraction", np.sum(mask) /
-            #       len(mask), "of objects after mass cut")
-        if z is not None:
-            mask *= (self.Catalog.Z >= z[0]) * (self.Catalog.Z <= z[1])
-            # print("keeping fraction", np.sum(mask) /
-            #       len(mask), "of objects after further z cut")
         if overlap:
             mask *= self.overlapFlag.copy()
             # print("keeping fraction", np.sum(mask)/len(mask),
@@ -709,8 +658,7 @@ class ThumbStack(object):
         To be used for noise weighting in the stacking.
         """
         # keep only objects that overlap, and mask point sources
-        mask = self.catalogMask(overlap=True, psMask=True, filterType=filterType, mVir=(
-            self.Catalog.Mvir.min(), self.Catalog.Mvir.max()), outlierReject=False)
+        mask = self.catalogMask(overlap=True, psMask=True, filterType=filterType, outlierReject=False)
         # This array contains the true variances for each object and aperture
         filtVarTrue = np.zeros((self.Catalog.nObj, self.nRAp))
 
@@ -819,8 +767,7 @@ class ThumbStack(object):
         # print("Measure mean T in z-bins (to subtract for kSZ)")
 
         # keep only objects that overlap, and mask point sources
-        mask = self.catalogMask(overlap=True, psMask=True, filterType=filterType, mVir=(
-            self.Catalog.Mvir.min(), self.Catalog.Mvir.max()))
+        mask = self.catalogMask(overlap=True, psMask=True, filterType=filterType)
 
         # redshift bins
         nZBins = 10
@@ -891,7 +838,7 @@ class ThumbStack(object):
 
     ##################################################################################
 
-    def computeStackedProfile(self, filterType, est, iBootstrap=None, iVShuffle=None, tTh='', stackedMap=False, mVir=None, z=[0., 100.], ts=None, mask=None):
+    def computeStackedProfile(self, filterType, est, iBootstrap=None, iVShuffle=None, stackedMap=False, ts=None, mask=None):
         """Returns the estimated profile and its uncertainty for each aperture.
         est: string to select the estimator
         iBootstrap: index for bootstrap resampling
@@ -907,70 +854,19 @@ class ThumbStack(object):
         # compute stacked profile from another thumbstack object
         if ts is None:
             ts = self
-        if mVir is None:
-            mVir = [ts.mMin, ts.mMax]
 
         # select objects that overlap, and reject point sources
         if mask is None:
             mask = ts.catalogMask(overlap=True, psMask=True,
-                                  filterType=filterType, mVir=mVir, z=z)
+                                  filterType=filterType)
 
 #      tMean = ts.meanT[filterType].copy()
 
         # temperatures [muK * sr]
-        if tTh == '':
-            t = ts.filtMap[filterType].copy()  # [muK * sr]
-        elif tTh == 'tsz':
-            # expected tSZ signal
-            # AP profile shape, between 0 and 1
-            sigma_cluster = 3.  # 1.5  # arcmin
-            shape = ts.ftheoryGaussianProfile(
-                sigma_cluster)  # between 0 and 1 [dimless]
-            # multiply by integrated y to get y profile [sr]
-            t = np.column_stack(
-                [ts.Catalog.integratedY[:] * shape[iAp] for iAp in range(ts.nRAp)])
-            # convert from y profile to dT profile if needed
-            if self.cmbUnitLatex == r'$\mu$K':
-                nu = self.cmbNu   # Hz
-                Tcmb = 2.726   # K
-                h = 6.63e-34   # SI
-                kB = 1.38e-23  # SI
-
-                def f(nu):
-                    """frequency dependence for tSZ temperature
-                    """
-                    x = h*nu/(kB*Tcmb)
-                    return x*(np.exp(x)+1.)/(np.exp(x)-1.) - 4.
-                # t *= 2. * f(nu) * Tcmb * 1.e6  # [muK * sr]
-                t *= f(nu) * Tcmb * 1.e6  # [muK * sr]
-        elif tTh == 'ksz':
-            # expected kSZ signal
-            # AP profile shape, between 0 and 1
-            sigma_cluster = 1.5  # arcmin
-            shape = ts.ftheoryGaussianProfile(
-                sigma_cluster)  # between 0 and 1 [dimless]
-            # multiply by integrated kSZ to get kSZ profile [muK * sr]
-            t = np.column_stack([ts.Catalog.integratedKSZ[:] * shape[iAp]
-                                for iAp in range(ts.nRAp)])   # [muK * sr]
-            if self.cmbUnitLatex == '':
-                t /= 2.726e6   # convert from [muK*sr] to [sr]
+        t = ts.filtMap[filterType].copy()  # [muK * sr]
         t = t[mask, :]
    #     tMean = tMean[mask,:]
         # -v/c [dimless]
-        v = -ts.Catalog.vR[mask] / 3.e5
-        v -= np.mean(v)
-
-#      # expected sigma_{v_{true}}, for the normalization
-#      #print "computing v1d norm"
-#      #tStartV = time()
-#      z = ts.Catalog.Z[mask]
-#      #f = lambda zGal: ts.U.v1dRms(0., zGal, W3d_sth)**2
-#      #sVTrue = np.sqrt(np.mean(np.array(map(f, z))))
-#      sVTrue = ts.U.v1dRms(0., np.mean(z), W3d_sth) / 3.e5  # (v^true_rms/c) [dimless]
-#      #print "sigma_v_true =", sVTrue
-#      #print "at z=0.57, expect", np.sqrt(f(0.57))
-#      #tStopV = time()
-#      #print "v1d norm took", tStopV - tStartV, "sec"
 
         # true filter variance for each object and aperture,
         # valid whether or not a hit count map is available
@@ -979,7 +875,6 @@ class ThumbStack(object):
         s2Hit = ts.filtHitNoiseStdDev[filterType][mask, :]**2
         # print "Shape of s2Hit = ", s2Hit.shape
         # halo masses
-        m = ts.Catalog.Mvir[mask]
 
         if iBootstrap is not None:
             # make sure each resample is independent,
@@ -994,10 +889,8 @@ class ThumbStack(object):
             #
             t = t[J, :]
             # tMean = tMean[J,:]
-            v = v[J]
             s2Hit = s2Hit[J, :]
             s2Full = s2Full[J, :]
-            m = m[J]
 
         if iVShuffle is not None:
             # make sure each shuffling is independent,
@@ -1008,8 +901,6 @@ class ThumbStack(object):
             I = np.arange(nObj)
             # shuffle the velocities
             J = np.random.permutation(I)
-            #
-            v = v[J]
 
         # tSZ: uniform weighting
         if est == 'tsz_uniformweight':
@@ -1024,46 +915,6 @@ class ThumbStack(object):
             weights = 1./s2Full
             norm = 1./np.sum(weights, axis=0)
 
-        # kSZ: uniform weighting
-        elif est == 'ksz_uniformweight':
-            # remove mean temperature
-            # t -= np.mean(t, axis=0)
-            #         t -= tMean
-            weights = v[:, np.newaxis] * np.ones_like(s2Hit)
-            # norm = sVTrue / np.sum(v[:,np.newaxis]*weights, axis=0)
-            norm = np.std(v) / ts.Catalog.rV / \
-                np.sum(v[:, np.newaxis]*weights, axis=0)
-        # kSZ: detector-noise weighted (hit count)
-        elif est == 'ksz_hitweight':
-            # remove mean temperature
-            # t -= np.mean(t, axis=0)
-            #         t -= tMean
-            weights = v[:, np.newaxis] / s2Hit
-            # norm = sVTrue / np.sum(v[:,np.newaxis]*weights, axis=0)
-            norm = np.std(v) / ts.Catalog.rV / \
-                np.sum(v[:, np.newaxis]*weights, axis=0)
-        # kSZ: full noise weighted (detector noise + CMB)
-        elif est == 'ksz_varweight':
-            # remove mean temperature
-            # t -= np.mean(t, axis=0)
-            #         t -= tMean
-            weights = v[:, np.newaxis] / s2Full
-            # norm = sVTrue / np.sum(v[:,np.newaxis]*weights, axis=0)
-            norm = np.std(v) / ts.Catalog.rV / \
-                np.sum(v[:, np.newaxis]*weights, axis=0)
-        # kSZ: full noise weighted (detector noise + CMB)
-        elif est == 'ksz_massvarweight':
-            # remove mean temperature
-            # t -= np.mean(t, axis=0)
-            #         t -= tMean
-            weights = m[:, np.newaxis] * v[:, np.newaxis] / s2Full
-            # norm = np.mean(m) * sVTrue / np.sum(m[:,np.newaxis]**2 * v[:,np.newaxis]**2 / s2Full, axis=0)
-            norm = np.mean(m) * np.std(v) / ts.Catalog.rV / \
-                np.sum(m[:, np.newaxis]**2 *
-                       v[:, np.newaxis]**2 / s2Full, axis=0)
-
-        # tStop = time()
-        # print "stacked profile took", tStop-tStart, "sec"
 
         # return the stacked profiles
         if not stackedMap:
@@ -1125,184 +976,7 @@ class ThumbStack(object):
             return resMap
 
 
-#   def computeStackedProfile(self, filterType, est, iBootstrap=None, iVShuffle=None, tTh=None, stackedMap=False, mVir=None, z=[0., 100.]):
-#      """Returns the estimated profile and its uncertainty for each aperture.
-#      est: string to select the estimator
-#      iBootstrap: index for bootstrap resampling
-#      iVShuffle: index for shuffling velocities
-#      tTh: to replace measured temperatures by a theory expectation
-#      """
-#      if mVir is None:
-#         mVir = [self.mMin, self.mMax]
-#
-#      # select objects that overlap, and reject point sources
-#      mask = self.catalogMask(overlap=True, psMask=True, filterType=filterType, mVir=mVir, z=z)
-#
-#      # temperatures [muK * sr]
-#      if tTh is None:
-#         t = self.filtMap[filterType].copy() # [muK * sr]
-#      elif tTh=='tsz':
-#         # expected tSZ signal
-#         # AP profile shape, between 0 and 1
-#         sigma_cluster = 1.5  # arcmin
-#         shape = self.ftheoryGaussianProfile(sigma_cluster) # between 0 and 1 [dimless]
-#         # multiply by integrated y to get y profile [sr]
-#         t = np.column_stack([self.Catalog.integratedY[:] * shape[iAp] for iAp in range(self.nRAp)])
-#         # convert from y profile to dT profile
-#         Tcmb = 2.726   # K
-#         h = 6.63e-34   # SI
-#         kB = 1.38e-23  # SI
-#         def f(nu):
-#            """frequency dependence for tSZ temperature
-#            """
-#            x = h*nu/(kB*Tcmb)
-#            return x*(np.exp(x)+1.)/(np.exp(x)-1.) -4.
-#         t *= 2. * f(150.e9) * Tcmb * 1.e6  # [muK * sr]
-#      elif tTh=='ksz':
-#         # expected kSZ signal
-#         # AP profile shape, between 0 and 1
-#         sigma_cluster = 1.5  # arcmin
-#         shape = self.ftheoryGaussianProfile(sigma_cluster) # between 0 and 1 [dimless]
-#         # multiply by integrated kSZ to get kSZ profile [muK * sr]
-#         t = np.column_stack([self.Catalog.integratedKSZ[:] * shape[iAp] for iAp in range(self.nRAp)])   # [muK * sr]
-#      t = t[mask, :]
-#      # -v/c [dimless]
-#      v = -self.Catalog.vR[mask] / 3.e5
-#      v -= np.mean(v)
-#      #true filter variance for each object and aperture,
-#      # valid whether or not a hit count map is available
-#      s2Full = self.filtVarTrue[filterType][mask, :]
-#      # Variance from hit count (if available)
-#      s2Hit = self.filtHitNoiseStdDev[filterType][mask, :]**2
-#      #print "Shape of s2Hit = ", s2Hit.shape
-#      # halo masses
-#      m = self.Catalog.Mvir[mask]
-#
-#      if iBootstrap is not None:
-#         # make sure each resample is independent,
-#         # and make the resampling reproducible
-#         np.random.seed(iBootstrap)
-#         # list of overlapping objects
-#         nObj = np.sum(mask)
-#         I = np.arange(nObj)
-#         # choose with replacement from this list
-#         J = np.random.choice(I, size=nObj, replace=True)
-#         #
-#         t = t[J,:]
-#         v = v[J]
-#         s2Hit = s2Hit[J,:]
-#         s2Full = s2Full[J,:]
-#         m = m[J]
-#
-#      if iVShuffle is not None:
-#         # make sure each shuffling is independent,
-#         # and make the shuffling reproducible
-#         np.random.seed(iVShuffle)
-#         # list of overlapping objects
-#         nObj = np.sum(mask)
-#         I = np.arange(nObj)
-#         # shuffle the velocities
-#         J = np.random.permutation(I)
-#         #
-#         v = v[J]
-#
-#      # tSZ: uniform weighting
-#      if est=='tsz_uniformweight':
-#         weights = np.ones_like(s2Hit)
-#         norm = 1./np.sum(weights, axis=0)
-#      # tSZ: detector-noise weighted (hit count)
-#      elif est=='tsz_hitweight':
-#         weights = 1./s2Hit
-#         norm = 1./np.sum(weights, axis=0)
-#      # tSZ: full noise weighted (detector noise + CMB)
-#      elif est=='tsz_varweight':
-#         weights = 1./s2Full
-#         norm = 1./np.sum(weights, axis=0)
-#
-#      # kSZ: uniform weighting
-#      elif est=='ksz_uniformweight':
-#         # remove mean temperature
-#         t -= np.mean(t, axis=0)
-#         weights = v[:,np.newaxis] * np.ones_like(s2Hit)
-#         norm = np.std(v) / np.sum(v[:,np.newaxis]*weights, axis=0)
-#      # kSZ: detector-noise weighted (hit count)
-#      elif est=='ksz_hitweight':
-#         # remove mean temperature
-#         t -= np.mean(t, axis=0)
-#         weights = v[:,np.newaxis] / s2Hit
-#         norm = np.std(v) / np.sum(v[:,np.newaxis]*weights, axis=0)
-#      # kSZ: full noise weighted (detector noise + CMB)
-#      elif est=='ksz_varweight':
-#         # remove mean temperature
-#         t -= np.mean(t, axis=0)
-#         weights = v[:,np.newaxis] / s2Full
-#         norm = np.std(v) / np.sum(v[:,np.newaxis]*weights, axis=0)
-#      # kSZ: full noise weighted (detector noise + CMB)
-#      elif est=='ksz_massvarweight':
-#         # remove mean temperature
-#         t -= np.mean(t, axis=0)
-#         weights = m[:,np.newaxis] * v[:,np.newaxis] / s2Full
-#         norm = np.mean(m) * np.std(v) / np.sum(m[:,np.newaxis]**2 * v[:,np.newaxis]**2 / s2Full, axis=0)
-#
-#      # return the stacked profiles
-#      if not stackedMap:
-#         stack = norm * np.sum(t * weights, axis=0)
-#         sStack = norm * np.sqrt(np.sum(s2Full * weights**2, axis=0))
-#         return stack, sStack
-#
-#
-#      # or, if requested, compute and return the stacked cutout map
-#      else:
-#         # define chunks
-#         nChunk = self.nProc
-#         chunkSize = self.Catalog.nObj / nChunk
-#         # list of indices for each of the nChunk chunks
-#         chunkIndices = [range(iChunk*chunkSize, (iChunk+1)*chunkSize) for iChunk in range(nChunk)]
-#         # make sure not to miss the last few objects:
-#         # add them to the last chunk
-#         chunkIndices[-1] = range((nChunk-1)*chunkSize, self.Catalog.nObj)
-#
-#         # select weights for a typical aperture size (not the smallest, not the largest)
-#         iRAp0 = self.nRAp / 2
-#         norm = norm[iRAp0]
-#         # need to link object number with weight,
-#         # despite the mask
-#         weightsLong = np.zeros(self.Catalog.nObj)
-#         weightsLong[mask] = weights[:,iRAp0]
-#
-#         def stackChunk(iChunk):
-#            # object indices to be processed
-#            chunk = chunkIndices[iChunk]
-#
-#            # start with a null map for stacking
-#            resMap = self.cutoutGeometry()
-#            for iObj in chunk:
-#               if iObj%100000==0:
-#                  print "- analyze object", iObj
-#               if self.overlapFlag[iObj]:
-#                  # Object coordinates
-#                  ra = self.Catalog.RA[iObj]   # in deg
-#                  dec = self.Catalog.DEC[iObj] # in deg
-#                  z = self.Catalog.Z[iObj]
-#                  # extract postage stamp around it
-#                  opos, stampMap, stampMask, stampHit = self.extractStamp(ra, dec, test=False)
-#                  resMap += stampMap * weightsLong[iObj]
-#            return resMap
-#
-#         # dispatch each chunk of objects to a different processor
-#         with sharedmem.MapReduce(np=self.nProc) as pool:
-#            resMap = np.array(pool.map(stackChunk, range(nChunk)))
-#
-#         # sum all the chunks
-#         resMap = np.sum(resMap, axis=0)
-#         # normalize by the proper sum of weights
-#         resMap *= norm
-#         return resMap
-
-    ##################################################################################
-
-
-    def plotFilterHistograms(self, filterType, mVir=None, z=[0., 100.], ts=None):
+    def plotFilterHistograms(self, filterType, ts=None):
         '''Plot histograms of the AP filter values,
         for each AP filter size,
         and compare with the Gaussian expectation.
@@ -1310,12 +984,10 @@ class ThumbStack(object):
         '''
         if ts is None:
             ts = self
-        if mVir is None:
-            mVir = [ts.mMin, ts.mMax]
 
         # select objects that overlap, and reject point sources
         mask = ts.catalogMask(overlap=True, psMask=True,
-                              filterType=filterType, mVir=mVir, z=z)
+                              filterType=filterType)
 
         # aperture photometry filters
         t = ts.filtMap[filterType].copy()  # [muK * sr]
@@ -1345,16 +1017,14 @@ class ThumbStack(object):
 
     ##################################################################################
 
-    def SaveCovBootstrapStackedProfile(self, filterType, est, mVir=None, z=[0., 100.], nSamples=100, nProc=1):
+    def SaveCovBootstrapStackedProfile(self, filterType, est, nSamples=100, nProc=1):
         """Estimate covariance matrix for the stacked profile from bootstrap resampling
         """
         # print("Performing", nSamples, "bootstrap resamples")
-        if mVir is None:
-            mVir = [self.mMin, self.mMax]
         tStart = time()
         with sharedmem.MapReduce(np=nProc) as pool:
             def f(iSample): return self.computeStackedProfile(
-                filterType, est, iBootstrap=iSample, mVir=mVir, z=z)
+                filterType, est, iBootstrap=iSample)
             result = np.array(pool.map(f, list(range(nSamples))))
             # result = np.array(map(f, range(nSamples)))
         tStop = time()
@@ -1368,7 +1038,7 @@ class ThumbStack(object):
         np.savetxt(self.pathOut+"/cov_"+filterType +
                    "_"+est+"_bootstrap.txt", covStack)
 
-    def SaveCovBootstrapTwoStackedProfiles(self, ts2, filterType, est, mVir=None, z=[0., 100.], nSamples=100, nProc=1):
+    def SaveCovBootstrapTwoStackedProfiles(self, ts2, filterType, est, nSamples=100, nProc=1):
         """Estimate the full covariance for two stacked profiles.
         These need to use the same galaxy catalog. The temperature maps can be different.
         Resamples only the objects in common, then rescales the cov assuming
@@ -1377,17 +1047,15 @@ class ThumbStack(object):
         """
         # print("Performing", nSamples, "bootstrap resamples")
         # for each resample, compute both profiles, and concatenate, before taking the cov
-        if mVir is None:
-            mVir = [self.mMin, self.mMax]
         tStart = time()
 
         # find the objects that overlap with both maps
         # bootstrap resample only these objects,
         # then rescale the cov mat
         mask1 = self.catalogMask(
-            overlap=True, psMask=True, filterType=filterType, mVir=mVir, z=z)
+            overlap=True, psMask=True, filterType=filterType)
         mask2 = ts2.catalogMask(overlap=True, psMask=True,
-                                filterType=filterType, mVir=mVir, z=z)
+                                filterType=filterType)
         mask12 = mask1 * mask2
         n1 = np.sum(mask1)
         n2 = np.sum(mask2)
@@ -1403,9 +1071,9 @@ class ThumbStack(object):
         def f(iSample):
             # print "Joint Bootstrap", iSample
             prof1 = self.computeStackedProfile(
-                filterType, est, iBootstrap=iSample, mVir=mVir, z=z, mask=mask12)
+                filterType, est, iBootstrap=iSample, mask=mask12)
             prof2 = self.computeStackedProfile(
-                filterType, est, iBootstrap=iSample, mVir=mVir, z=z, ts=ts2, mask=mask12)
+                filterType, est, iBootstrap=iSample, ts=ts2, mask=mask12)
             # concatenate the 2 profiles
             jointProf = np.concatenate((prof1[0], prof2[0]))
             return jointProf
@@ -1441,15 +1109,13 @@ class ThumbStack(object):
                 self.SaveCovBootstrapTwoStackedProfiles(
                     ts2, filterType, est, nSamples=self.nSamples, nProc=min(8, self.nProc))
 
-    def SaveCovVShuffleStackedProfile(self, filterType, est, mVir=None, z=[0., 100.], nSamples=100, nProc=1):
+    def SaveCovVShuffleStackedProfile(self, filterType, est, nSamples=100, nProc=1):
         """Estimate covariance matrix for the stacked profile from shuffling velocities
         """
-        if mVir is None:
-            mVir = [self.mMin, self.mMax]
         tStart = time()
         with sharedmem.MapReduce(np=nProc) as pool:
             def f(iSample): return self.computeStackedProfile(
-                filterType, est, iVShuffle=iSample, mVir=mVir, z=z)
+                filterType, est, iVShuffle=iSample)
             result = np.array(pool.map(f, list(range(nSamples))))
         tStop = time()
         # print("took", (tStop-tStart)/60., "min")
@@ -1497,7 +1163,7 @@ class ThumbStack(object):
                 est = Est[iEst]
                 # print("compute stacked map:", filterType, est)
                 stackedMap = self.computeStackedProfile(
-                    filterType, est, iBootstrap=None, iVShuffle=None, tTh='', stackedMap=True)
+                    filterType, est, iBootstrap=None, iVShuffle=None, stackedMap=True)
 
                 # save the stacked cutout
                 path = self.pathOut + "/stackedmap_"+filterType+"_"+est+".txt"
@@ -1537,16 +1203,6 @@ class ThumbStack(object):
                     filterType, est)  # [map unit * sr]
                 np.savetxt(self.pathOut+"/"+filterType +
                            "_"+est+"_measured.txt", data)
-                # expected stacked profile from tSZ
-                data[:, 1], data[:, 2] = self.computeStackedProfile(
-                    filterType, est, tTh='tsz')  # [map unit * sr]
-                np.savetxt(self.pathOut+"/"+filterType +
-                           "_"+est+"_theory_tsz.txt", data)
-                # expected stacked profile from kSZ
-                data[:, 1], data[:, 2] = self.computeStackedProfile(
-                    filterType, est, tTh='ksz')  # [map unit * sr]
-                np.savetxt(self.pathOut+"/"+filterType +
-                           "_"+est+"_theory_ksz.txt", data)
 
             # covariance matrices from bootstrap,
             # only for a few select estimators
@@ -1555,45 +1211,6 @@ class ThumbStack(object):
                     est = self.EstBootstrap[iEst]
                     self.SaveCovBootstrapStackedProfile(
                         filterType, est, nSamples=self.nSamples, nProc=self.nProc)
-
-            # covariance matrices from shuffling velocities,
-            # for ksz only
-            if self.doVShuffle:
-                for iEst in range(len(self.EstVShuffle)):
-                    est = self.EstVShuffle[iEst]
-                    self.SaveCovVShuffleStackedProfile(
-                        filterType, est, nSamples=self.nSamples, nProc=self.nProc)
-
-        # Stacked profiles in mass bins, to check for contamination
-        if self.doMBins:
-            for iFilterType in range(len(self.filterTypes)):
-                filterType = self.filterTypes[iFilterType]
-                for iEst in range(len(self.EstMBins)):
-                    est = self.EstMBins[iEst]
-                    data = np.zeros((self.nRAp, 2*self.nMMax+1))
-                    data[:, 0] = self.RApArcmin  # [arcmin]
-                    dataTsz = data.copy()
-                    dataKsz = data.copy()
-                    for iMMax in range(self.nMMax):
-                        mMax = self.MMax[iMMax]
-
-                        # measured stacked profile
-                        data[:, 1+2*iMMax], data[:, 1+2*iMMax+1] = self.computeStackedProfile(
-                            filterType, est, mVir=[1.e6, mMax])  # [map unit * sr]
-                        # expcted from tSZ
-                        dataTsz[:, 1+2*iMMax], dataTsz[:, 1+2*iMMax+1] = self.computeStackedProfile(
-                            filterType, est, mVir=[1.e6, mMax], tTh='tsz')  # [map unit * sr]
-                        # expected from kSZ
-                        dataKsz[:, 1+2*iMMax], dataKsz[:, 1+2*iMMax+1] = self.computeStackedProfile(
-                            filterType, est, mVir=[1.e6, mMax], tTh='ksz')  # [map unit * sr]
-
-                    # Save all stacked profiles
-                    np.savetxt(self.pathOut+"/"+filterType+"_" +
-                               est+"_mmax_measured.txt", data)
-                    np.savetxt(self.pathOut+"/"+filterType+"_" +
-                               est+"_mmax_theory_tsz.txt", dataTsz)
-                    np.savetxt(self.pathOut+"/"+filterType+"_" +
-                               est+"_mmax_theory_ksz.txt", dataKsz)
 
         tStop = time()
         print("Computing all stacked profiles (and cov) took",
@@ -1632,18 +1249,6 @@ class ThumbStack(object):
                 self.sStackedProfile[filterType+"_" +
                                      est+"_theory_ksz"] = data[:, 2]
 
-            # Null tests from shuffling velocities,
-            # for ksz only
-            if self.doVShuffle:
-                for iEst in range(len(self.EstVShuffle)):
-                    est = self.EstVShuffle[iEst]
-                    # null test from shuffling the velocities
-                    data = np.genfromtxt(
-                        self.pathOut+"/"+filterType+"_"+est+"_vshufflemean.txt")
-                    self.stackedProfile[filterType+"_" +
-                                        est+"_vshufflemean"] = data[:, 1]
-                    self.sStackedProfile[filterType+"_" +
-                                         est+"_vshufflemean"] = data[:, 2]
 
             # stacked profiles in mass bins
             if self.doMBins:
@@ -1683,13 +1288,6 @@ class ThumbStack(object):
                     self.covBootstrap[filterType+"_"+est] = np.genfromtxt(
                         self.pathOut+"/cov_"+filterType+"_"+est+"_bootstrap.txt")
 
-            # covariance matrices from shuffling velocities,
-            # for ksz only
-            if self.doVShuffle:
-                for iEst in range(len(self.EstVShuffle)):
-                    est = self.EstVShuffle[iEst]
-                    self.covVShuffle[filterType+"_"+est] = np.genfromtxt(
-                        self.pathOut+"/cov_"+filterType+"_"+est+"_vshuffle.txt")
 
     ##################################################################################
 
@@ -1803,164 +1401,6 @@ class ThumbStack(object):
                               for iMMax in range(self.nMMax)] + [est]
                     self.plotStackedProfile(
                         filterType, estArr, name=filterType+"_"+est+"_mmax", theory=False, legend=False)
-#               # expected from tSZ
-#               estArr = [est+"_mmax"+str(iMMax)+"_theory_tsz" for iMMax in range(self.nMMax)] + [est]
-#               self.plotStackedProfile(filterType, estArr, name=filterType+"_"+est+"_mmax_theory_tsz", theory=False, legend=False)
-#               # expected from kSZ
-#               estArr = [est+"_mmax"+str(iMMax)+"_theory_ksz" for iMMax in range(self.nMMax)] + [est]
-#               self.plotStackedProfile(filterType, estArr, name=filterType+"_"+est+"_mmax_theory_ksz", theory=False, legend=False)
-
-    ##################################################################################
-
-    def plotTszKszContaminationMMax(self):
-        '''Bias from tSZ to kSZ and vice versa:
-        compare bias to signal and error bar,
-        as a function of maximum mass in the galaxy sample.
-        '''
-        print("Plotting contamination as a function of MMax")
-
-        for iFilterType in range(len(self.filterTypes)):
-            filterType = self.filterTypes[iFilterType]
-
-            for iEst in range(len(self.EstMBins)):
-                est = self.EstMBins[iEst]
-
-                TszToKsz = np.zeros(self.nMMax)
-                KszToTsz = np.zeros(self.nMMax)
-                # checks that the estimators are unbiased for all Mmax
-                KszToKsz = np.zeros(self.nMMax)
-                TszToTsz = np.zeros(self.nMMax)
-                # error bars as a function of Mmax
-                sKsz = np.zeros(self.nMMax)
-                sTsz = np.zeros(self.nMMax)
-                for iMMax in range(self.nMMax):
-                    # ratio of expected tSZ for this Mmax
-                    # to the full expected kSZ
-                    ratio = self.stackedProfile[filterType+"_" +
-                                                est+"_mmax"+str(iMMax)+"_theory_tsz"].copy()
-                    ratio /= self.stackedProfile[filterType +
-                                                 "_"+est+"_theory_ksz"]
-                    # here the value at each aperture is equal to the mean
-                    TszToKsz[iMMax] = np.mean(ratio)
-
-                    # ratio of expected tSZ for this Mmax
-                    # to the full expected tSZ, as a check
-                    ratio = self.stackedProfile[filterType+"_" +
-                                                est+"_mmax"+str(iMMax)+"_theory_tsz"].copy()
-                    ratio /= self.stackedProfile[filterType +
-                                                 "_"+est+"_theory_tsz"]
-                    # here the value at each aperture is equal to the mean
-                    TszToTsz[iMMax] = np.mean(ratio)
-
-                    # expected kSZ error bar for the corresponding Mmax cut
-                    ratio = self.sStackedProfile[filterType +
-                                                 "_"+est+"_mmax"+str(iMMax)].copy()
-                    ratio /= self.stackedProfile[filterType +
-                                                 "_"+est+"_theory_ksz"]
-                    # ratio /= self.stackedProfile[filterType+"_"+est+"_mmax"+str(iMMax)+"_theory_ksz"]
-                    # here the value at each aperture is equal to the mean
-                    sKsz[iMMax] = np.abs(np.mean(ratio))
-
-                    # ratio of expected kSZ for this Mmax
-                    # to the full expected tSZ
-                    ratio = self.stackedProfile[filterType+"_" +
-                                                est+"_mmax"+str(iMMax)+"_theory_ksz"].copy()
-                    ratio /= self.stackedProfile[filterType +
-                                                 "_"+est+"_theory_tsz"]
-                    # here the value at each aperture is equal to the mean
-                    KszToTsz[iMMax] = np.mean(ratio)
-
-                    # ratio of expected kSZ for this Mmax
-                    # to the full expected kSZ, as a check
-                    ratio = self.stackedProfile[filterType+"_" +
-                                                est+"_mmax"+str(iMMax)+"_theory_ksz"].copy()
-                    ratio /= self.stackedProfile[filterType +
-                                                 "_"+est+"_theory_ksz"]
-                    # here the value at each aperture is equal to the mean
-                    KszToKsz[iMMax] = np.mean(ratio)
-
-                    # expected error tSZ bar for the corresponding Mmax cut
-                    ratio = self.sStackedProfile[filterType +
-                                                 "_"+est+"_mmax"+str(iMMax)].copy()
-                    ratio /= self.stackedProfile[filterType +
-                                                 "_"+est+"_theory_tsz"]
-                    # ratio /= self.stackedProfile[filterType+"_"+est+"_mmax"+str(iMMax)+"_theory_tsz"]
-                    # here the value at each aperture is equal to the mean
-                    sTsz[iMMax] = np.abs(np.mean(ratio))
-
-                fig = plt.figure(0)
-                ax = fig.add_subplot(111)
-                #
-                # convert from sr to arcmin^2
-                factor = (180.*60./np.pi)**2
-                #
-                ax.axhline(0., c='k', lw=1)
-                #
-                # ax.axhline(1., lw=1, label=r'Expected kSZ')
-                ax.plot(self.MMax, KszToKsz, 'b', label='kSZ signal')
-                ax.plot(self.MMax, -KszToKsz, 'b--')
-                ax.plot(self.MMax, 0.1*KszToKsz, 'b', alpha=0.3)
-                ax.plot(self.MMax, -0.1*KszToKsz, 'b--', alpha=0.3)
-                ax.plot([self.mMax], [1.], 'bo')
-                #
-                ax.plot(self.MMax, TszToKsz, 'r', label='tSZ bias to kSZ')
-                ax.plot(self.MMax, -TszToKsz, 'r--')
-                #
-                ax.fill_between(self.MMax, sKsz, edgecolor='',
-                                facecolor='gray', alpha=0.5, label='kSZ error bar')
-                ax.fill_between(self.MMax, 0.1*sKsz, edgecolor='',
-                                facecolor='gray', alpha=0.3)
-                #
-                # ignore the first mMax values for which there is no object in the sample
-                xMin = np.min(self.MMax[np.isfinite(sKsz)])
-                xMax = np.max(self.MMax[np.isfinite(sKsz)])
-                ax.set_xlim((xMin, xMax))
-                ax.set_ylim((1.e-3, 10.))
-                ax.legend(loc=2, fontsize='x-small', labelspacing=0.1)
-                ax.set_xscale('log', nonpositive='clip')
-                ax.set_yscale('log', nonpositive='clip')
-                ax.set_xlabel(r'$M_\text{vir max}$ [$M_\odot$]')
-                ax.set_ylabel(r'Fraction of expected kSZ')
-                #
-                name = filterType+"_"+est+"_mmax_tsztoksz"
-                path = self.pathFig+"/"+name+".pdf"
-                fig.savefig(path, bbox_inches='tight')
-                fig.clf()
-
-                fig = plt.figure(1)
-                ax = fig.add_subplot(111)
-                #
-                # convert from sr to arcmin^2
-                factor = (180.*60./np.pi)**2
-                #
-                ax.axhline(0., c='k', lw=1)
-                # ax.axhline(1., lw=1, label=r'Expected tSZ')
-                ax.plot(self.MMax, TszToTsz, 'b', label='tSZ signal')
-                ax.plot(self.MMax, -TszToTsz, 'b--')
-                ax.plot(self.MMax, 0.1*TszToTsz, 'b', alpha=0.3)
-                ax.plot(self.MMax, -0.1*TszToTsz, 'b--', alpha=0.3)
-                ax.plot([self.mMax], [1.], 'bo')
-                #
-                ax.plot(self.MMax, KszToTsz, 'r', label='kSZ bias to tSZ')
-                ax.plot(self.MMax, -KszToTsz, 'r--')
-                #
-                ax.fill_between(self.MMax, sTsz, edgecolor='',
-                                facecolor='gray', alpha=0.5, label='tSZ error bar')
-                ax.fill_between(self.MMax, 0.1*sTsz, edgecolor='',
-                                facecolor='gray', alpha=0.3)
-                #
-                ax.set_xlim((self.MMax[1], self.MMax.max()))
-                ax.set_ylim((1.e-3, 10.))
-                ax.legend(loc=2, fontsize='x-small', labelspacing=0.1)
-                ax.set_xscale('log', nonpositive='clip')
-                ax.set_yscale('log', nonpositive='clip')
-                ax.set_xlabel(r'$M_\text{vir max}$ [$M_\odot$]')
-                ax.set_ylabel(r'Fraction of expected tSZ')
-                #
-                name = filterType+"_"+est+"_mmax_ksztotsz"
-                path = self.pathFig+"/"+name+".pdf"
-                fig.savefig(path, bbox_inches='tight')
-                fig.clf()
 
     ##################################################################################
 
@@ -2035,13 +1475,6 @@ class ThumbStack(object):
                     self.plotCov(
                         self.covBootstrap[filterType+"_"+est], filterType+"_"+est+"_bootstrap")
 
-            # covariance matrices from shuffling velocities,
-            # for ksz only
-            if self.doVShuffle:
-                for iEst in range(len(self.EstVShuffle)):
-                    est = self.EstVShuffle[iEst]
-                    self.plotCov(
-                        self.covVShuffle[filterType+"_"+est], filterType+"_"+est+"_vshuffle")
 
     ##################################################################################
 
