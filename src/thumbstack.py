@@ -1234,51 +1234,6 @@ class ThumbStack(object):
                     self.pathOut+"/"+filterType+"_"+est+"_measured.txt")
                 self.stackedProfile[filterType+"_"+est] = data[:, 1]
                 self.sStackedProfile[filterType+"_"+est] = data[:, 2]
-                # expected stacked profile from tSZ
-                data = np.genfromtxt(
-                    self.pathOut+"/"+filterType+"_"+est+"_theory_tsz.txt")
-                self.stackedProfile[filterType+"_" +
-                                    est+"_theory_tsz"] = data[:, 1]
-                self.sStackedProfile[filterType+"_" +
-                                     est+"_theory_tsz"] = data[:, 2]
-                # expected stacked profile from kSZ
-                data = np.genfromtxt(
-                    self.pathOut+"/"+filterType+"_"+est+"_theory_ksz.txt")
-                self.stackedProfile[filterType+"_" +
-                                    est+"_theory_ksz"] = data[:, 1]
-                self.sStackedProfile[filterType+"_" +
-                                     est+"_theory_ksz"] = data[:, 2]
-
-
-            # stacked profiles in mass bins
-            if self.doMBins:
-                for iEst in range(len(self.EstMBins)):
-                    est = self.EstMBins[iEst]
-
-                    # measured stacked profile
-                    data = np.genfromtxt(
-                        self.pathOut+"/"+filterType+"_"+est+"_mmax_measured.txt")
-                    for iMMax in range(self.nMMax):
-                        self.stackedProfile[filterType+"_"+est +
-                                            "_mmax"+str(iMMax)] = data[:, 1+2*iMMax]
-                        self.sStackedProfile[filterType+"_"+est +
-                                             "_mmax"+str(iMMax)] = data[:, 1+2*iMMax+1]
-                    # expected stacked profile from tSZ
-                    data = np.genfromtxt(
-                        self.pathOut+"/"+filterType+"_"+est+"_mmax_theory_tsz.txt")
-                    for iMMax in range(self.nMMax):
-                        self.stackedProfile[filterType+"_"+est+"_mmax" +
-                                            str(iMMax)+"_theory_tsz"] = data[:, 1+2*iMMax]
-                        self.sStackedProfile[filterType+"_"+est+"_mmax" +
-                                             str(iMMax)+"_theory_tsz"] = data[:, 1+2*iMMax+1]
-                    # expected stacked profile from kSZ
-                    data = np.genfromtxt(
-                        self.pathOut+"/"+filterType+"_"+est+"_mmax_theory_ksz.txt")
-                    for iMMax in range(self.nMMax):
-                        self.stackedProfile[filterType+"_"+est+"_mmax" +
-                                            str(iMMax)+"_theory_ksz"] = data[:, 1+2*iMMax]
-                        self.sStackedProfile[filterType+"_"+est+"_mmax" +
-                                             str(iMMax)+"_theory_ksz"] = data[:, 1+2*iMMax+1]
 
             # covariance matrices from bootstrap,
             # only for a few select estimators
