@@ -1278,11 +1278,11 @@ class ThumbStack(object):
 
                 ax.errorbar(ts.RApArcmin+iTs*0.05, factor * ts.stackedProfile[filterType+"_"+est], factor * ts.sStackedProfile[filterType +
                             "_"+est], fmt=ls, label=filterType.replace('_', ' ')+' '+est.replace('_', ' ')+' '+ts.name.replace('_', ' '))
-                if theory:
-                    ax.plot(ts.RApArcmin+iTs*0.05, factor * ts.stackedProfile[filterType+"_"+est+"_theory_tsz"], ls='--', label="theory tsz, "+filterType.replace(
-                        '_', ' ')+' '+est.replace('_', ' ')+' '+ts.name.replace('_', ' '))
-                    ax.plot(ts.RApArcmin+iTs*0.05, factor * ts.stackedProfile[filterType+"_"+est+"_theory_ksz"], ls='-.', label="theory ksz, "+filterType.replace(
-                        '_', ' ')+' '+est.replace('_', ' ')+' '+ts.name.replace('_', ' '))
+                #if theory:
+                #    ax.plot(ts.RApArcmin+iTs*0.05, factor * ts.stackedProfile[filterType+"_"+est+"_theory_tsz"], ls='--', label="theory tsz, "+filterType.replace(
+                #        '_', ' ')+' '+est.replace('_', ' ')+' '+ts.name.replace('_', ' '))
+                #    ax.plot(ts.RApArcmin+iTs*0.05, factor * ts.stackedProfile[filterType+"_"+est+"_theory_ksz"], ls='-.', label="theory ksz, "+filterType.replace(
+                #        '_', ' ')+' '+est.replace('_', ' ')+' '+ts.name.replace('_', ' '))
         #
         if legend:
             ax.legend(loc=2, fontsize='x-small', labelspacing=0.1)
@@ -1346,16 +1346,16 @@ class ThumbStack(object):
                     filterType, [est], name=filterType+"_"+est)
 
             # stacked profiles in mass bins
-            if self.doMBins:
-                self.plotTszKszContaminationMMax()
+            #if self.doMBins:
+            #    self.plotTszKszContaminationMMax()
 
-                for iEst in range(len(self.EstMBins)):
-                    est = self.EstMBins[iEst]
+            #    for iEst in range(len(self.EstMBins)):
+            #        est = self.EstMBins[iEst]
                     # measured stacked profiles
-                    estArr = [est+"_mmax"+str(iMMax)
-                              for iMMax in range(self.nMMax)] + [est]
-                    self.plotStackedProfile(
-                        filterType, estArr, name=filterType+"_"+est+"_mmax", theory=False, legend=False)
+            #        estArr = [est+"_mmax"+str(iMMax)
+            #                  for iMMax in range(self.nMMax)] + [est]
+            #        self.plotStackedProfile(
+            #            filterType, estArr, name=filterType+"_"+est+"_mmax", theory=False, legend=False)
 
     ##################################################################################
 
@@ -1735,7 +1735,7 @@ class ThumbStack(object):
             for filterType in self.filterTypes:
                 for est in self.EstBootstrap:
                     self.computeSnrStack(filterType, est)
-                    self.computeSnrStack(filterType, est, tTh='tsz')
-                    self.computeSnrStack(filterType, est, tTh='ksz')
+                    #self.computeSnrStack(filterType, est, tTh='tsz')
+                    #self.computeSnrStack(filterType, est, tTh='ksz')
 
     ##################################################################################
