@@ -3,6 +3,8 @@
 pathOut = 'your/path/to/ThumbStack'
 
 from headers import *
+from astropy.io import ascii
+from astropy.table import Table
 
 ##################################################################################
 ##################################################################################
@@ -131,7 +133,7 @@ class ThumbStack(object):
 
         if save:
             self.plotAllStackedProfiles()
-            self.plotAllCov()
+            #self.plotAllCov() commented out because we want to focus on stacked profiles
             self.computeAllSnr()
 
         # if save:
@@ -1268,6 +1270,11 @@ class ThumbStack(object):
         #
         # colors = ['r', 'g', 'b', 'm', 'c']
         lineStyles = ['-', '--', '-.', ':']
+
+        t_val=[]
+        r_val=[]
+        sigma=[]
+        
         for iEst in range(len(Est)):
             est = Est[iEst]
             # c = colors[iEst%len(colors)]
@@ -1278,6 +1285,10 @@ class ThumbStack(object):
 
                 ax.errorbar(ts.RApArcmin+iTs*0.05, factor * ts.stackedProfile[filterType+"_"+est], factor * ts.sStackedProfile[filterType +
                             "_"+est], fmt=ls, label=filterType.replace('_', ' ')+' '+est.replace('_', ' ')+' '+ts.name.replace('_', ' '))
+
+                t_val=factor * ts.stackedProfile[filterType+"_"+est]
+                r_val=ts.RApArcmin+iTs*0.05
+                sigma=factor * ts.sStackedProfile[filterType + "_"+est]
                 #if theory:
                 #    ax.plot(ts.RApArcmin+iTs*0.05, factor * ts.stackedProfile[filterType+"_"+est+"_theory_tsz"], ls='--', label="theory tsz, "+filterType.replace(
                 #        '_', ' ')+' '+est.replace('_', ' ')+' '+ts.name.replace('_', ' '))
@@ -1292,6 +1303,14 @@ class ThumbStack(object):
         #
         path = pathDir+"/"+name+".pdf"
         fig.savefig(path, bbox_inches='tight')
+
+        unifTable=Table()
+        unifTable['R']=r_val
+        unifTable['T']=t_val
+        unifTable['error']=sigma
+        table_path=pathDir+"/"+name+".fits"
+        unifTable.write(table_path, format='fits', overwrite=True)  
+        
         if plot:
             plt.show()
         fig.clf()

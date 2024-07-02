@@ -12,11 +12,11 @@ import astropy
 from pixell import enmap, enplot, reproject, utils, curvedsky 
 import numpy as np
 
-from astropy.table import Table
-import astropy
-
-from pixell import enmap, enplot, reproject, utils, curvedsky 
-import numpy as np
+# from pixell: eshow which allows you to view maps
+def eshow(x,**kwargs): 
+    ''' Define a function to help us plot the maps neatly '''
+    plots = enplot.get_plots(x, **kwargs)
+    enplot.show(plots, method = "ipython")
 
 ########################################################## cutting
 
@@ -38,9 +38,10 @@ def cutting(file_name, dict):
         new_tab=data[condition_1]
         condition_2=new_tab[key] <= my_max
         data=new_tab[condition_2] #rewrites what the data table so if there are multiple param boundaries it works with the already edited table
+        print('- Property boundaries applied')
     return data #returns a viewable table
 
-########################################################## massage
+########################################################## massage (THIS HAS SINCE BEEN REPLACED BY TABLEREADER IN THUMBSTACK.PY)
 # description: inputs astropy table, outputs thumbstack friendly catalog
 
 # requirements: my_functions.py, astropy Table
@@ -48,6 +49,7 @@ def cutting(file_name, dict):
 # arguements:
 # - data_table: astropy table (in our case would do data_table=cutting(...) )
 # - directory_name: name of the output catalog folder (string)
+
 
 def massage(data_table, directory_name):
     ################## set-up
@@ -94,27 +96,24 @@ def massage(data_table, directory_name):
 
 # arguements: 
 # - map_name: filename (with .fits and/or .txt extension; string)
-# - ra_bounds (optional): [min_ra, max_ra]
-# - dec_bounds (optional): [min_dec, max_dec]
+# - save: if user wants to save the mask as fits (True/ False)
+# - save_name: name of file the map will save as. do not add .fits, function does so. (string)
 
-def mapping(map_name, ra_bounds=None, dec_bounds=None):
-    # put map in specified box
-    if ra_bounds is None and dec_bounds is None:
-        result = enmap.read_map(map_name)
-    else:
-        # # Set the size of the box in degrees and convert to radians
-        dec_from, dec_to = np.deg2rad(dec_bounds)
-        ra_from, ra_to = np.deg2rad(ra_bounds)
-        
-        # # Create the box
-        box = [[dec_from,ra_from],[dec_to,ra_to]]
-        
-        result = enmap.read_map(map_name, box=box)
-          
+def mapping(map_name, save=False, save_name=None):
+    print('- Map: Importing CMB map')
+    result = enmap.read_map(map_name)
+
+    print('- Map: Remove polarization')
     # if the map contains polarization, keep only temperature
     if len(result.shape) > 2:
         result = result[0]
-        
+
+    if save:
+        that_name = save_name + '.fits'
+        print('- Map: Saving map as '+that_name)
+        enmap.write_map(that_name, result)
+
+    print('- Map: Creation Done')
     return result
 
 
@@ -124,29 +123,37 @@ def mapping(map_name, ra_bounds=None, dec_bounds=None):
 # requirements: my_functions.py, ACT map
 
 # arguements: 
-# - map_name: filename (with .fits and/or .txt extension; string)
-# - ra_bounds (optional): [min_ra, max_ra]
-# - dec_bounds (optional): [min_dec, max_dec]
+# - act_map: filename (with .fits and/or .txt extension; string)
+# - planck_map: filename (with .fits and/or .txt extension; string)
+# - save: if user wants to save the mask as fits (True/ False)
+# - save_name: name of file the map will save as. do not add .fits, function does so. (string)
 
-def masking(map_name, ra_bounds=None, dec_bounds=None):
-    # put map in specified box
-    if ra_bounds is None and dec_bounds is None:
-        CMBmap = enmap.read_map(map_name)
-    elif ra_bounds is not None and dec_bounds is not None:
-        # # Set the size of the box in degrees and convert to radians
-        dec_from, dec_to = np.deg2rad(dec_bounds)
-        ra_from, ra_to = np.deg2rad(ra_bounds)
-        
-        # # Create the box
-        box = [[dec_from,ra_from],[dec_to,ra_to]]
-        
-        CMBmap = enmap.read_map(map_name, box=box)
-
+def masking(act_map, planck_map, save=False, save_name=None):
+    print('- Mask: Importing CMB Map')
+    CMBmap = enmap.read_map(act_map)
+    
     # remove polarization and have all int values >1 become 1
+    print('- Mask: Remove Polarization and have all int>1 become 1')
     if len(CMBmap.shape) > 2:
         CMBmap = CMBmap[0]
-        result = np.logical_not(CMBmap == 0).astype(int)
+        CMBmap_edit = np.logical_not(CMBmap == 0).astype(int)
     elif len(CMBmap.shape) <= 2:
-        result = np.logical_not(CMBmap == 0).astype(int)
-        
+        CMBmap_edit = np.logical_not(CMBmap == 0).astype(int)
+
+    print('- Mask: Importing Planck mask')
+    # planck map mask
+    pmap_fname = hp.read_map(planck_map)
+
+    print('- Mask: Changing Planck mask to pixell friendly')
+    planck_map = reproject.healpix2map(pmap_fname, CMBmap_edit.shape, CMBmap_edit.wcs, rot=None, method='spline', spin=[0], order=0)
+
+    # result of all processes
+    result = planck_map*CMBmap_edit
+
+    if save:
+        that_name = save_name + '.fits'
+        print('- Mask: Saving mask as '+that_name)
+        enmap.write_map(that_name, result)
+
+    print('- Mask: Creation Done')
     return result
