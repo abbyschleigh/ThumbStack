@@ -22,7 +22,7 @@ def eshow(x,**kwargs):
 
 # description: inputs fits file, outputs astropy table with imposed constraints
 
-# requirments: my_functions.py, fits file
+# requirments: fits file
 
 # arguements:
 # - file_name: name of file (without .fits extension ; string)
@@ -38,13 +38,14 @@ def cutting(file_name, dict):
         new_tab=data[condition_1]
         condition_2=new_tab[key] <= my_max
         data=new_tab[condition_2] #rewrites what the data table so if there are multiple param boundaries it works with the already edited table
-        print('- Property boundaries applied')
+    
+    print('- Property boundaries applied')
     return data #returns a viewable table
 
 ########################################################## massage (THIS HAS SINCE BEEN REPLACED BY TABLEREADER IN THUMBSTACK.PY)
 # description: inputs astropy table, outputs thumbstack friendly catalog
 
-# requirements: my_functions.py, astropy Table
+# requirements: astropy Table
 
 # arguements:
 # - data_table: astropy table (in our case would do data_table=cutting(...) )
@@ -92,7 +93,7 @@ def massage(data_table, directory_name):
 ########################################################## mapping
 # description: inputs ACT CMB map, outputs map w/o poloarization. can specify ra and dec, not req
 
-# requirements: my_functions.py, ACT map
+# requirements: ACT map
 
 # arguements: 
 # - map_name: filename (with .fits and/or .txt extension; string)
@@ -120,7 +121,7 @@ def mapping(map_name, save=False, save_name=None):
 ########################################################## masking
 # description: inputs ACT CMB map, output mask that takes all obs array values that >1 become 1. 0 stays 0. also strips map to just color
 
-# requirements: my_functions.py, ACT map
+# requirements: ACT map, planck map
 
 # arguements: 
 # - act_map: filename (with .fits and/or .txt extension; string)
@@ -157,3 +158,83 @@ def masking(act_map, planck_map, save=False, save_name=None):
 
     print('- Mask: Creation Done')
     return result
+
+
+########################################################## binning
+# description: bins galaxies based on a physical property and into (generally) equal groups
+
+# requirements: fits table
+
+# arguements: 
+# - table_name: name of file (without .fits extension ; string)
+# - n_bins: number of bins
+# - gal_property: property to be binned by (current capabilities are for z, logm, logsfr, or agnlum); string
+# - printed: if you want the min and max info printed
+# - tabled: if you want the min and max info in an astropy table
+
+def binning(table_name, n_bins, gal_property, printed=False, tabled=False):
+    # flag if printed or tabled is not specified
+    if printed == False and tabled == False:
+        print('Error: Choose if printed or tabled')
+        return
+
+    table = Table.read(table_name+'.fits', format='fits')
+
+    # sort table based on the property provided
+    sorted_tab = table[table[gal_property].argsort()]
+    
+    # get how many galaxies will be in each bin
+    length = len(table)
+    base_value = length // n_bins
+    remainder = length % n_bins
+    bins = [base_value + 1 if i < remainder else base_value for i in range(n_bins)] #list of bin amount
+
+    if tabled:
+        z = []
+        logm = []
+        logsfr = []
+        agnlum = []
+
+    starting = 0
+    for i in range(n_bins):
+        ending = starting + bins[i]
+        
+        cut_table = Table() #clears out table from prev loop
+        cut_table = sorted_tab[starting:ending]
+
+        starting += bins[i]
+        
+        if printed:
+            print('------------------ Bin ', i+1, ' ------------------')
+            print('')
+            print('# galaxies : ', len(cut_table))
+            print('RA min/max : ', cut_table['RA'].min(), ' / ', cut_table['RA'].max())
+            print('LOGM min/max : ', cut_table['LOGM'].min(), ' / ', cut_table['LOGM'].max())
+            print('LOGSFR min/max : ', cut_table['LOGSFR'].min(), ' / ', cut_table['LOGSFR'].max())
+            print('AGNLUM min/max : ', cut_table['AGNLUM'].min(), ' / ', cut_table['AGNLUM'].max())
+            print('')
+
+        if tabled:
+            z.append([cut_table['RA'].min(), cut_table['RA'].max()])
+            logm.append([cut_table['LOGM'].min(), cut_table['LOGM'].max()])
+            logsfr.append([cut_table['LOGSFR'].min(), cut_table['LOGSFR'].max()])
+            agnlum.append([cut_table['AGNLUM'].min(), cut_table['AGNLUM'].max()])
+
+    if printed:
+        return
+    
+    data = {
+        'n_galaxies': bins, 
+        'RA_min': [sublist[0] for sublist in z], 
+        'RA_max': [sublist[1] for sublist in z], 
+        'LOGM_min': [sublist[0] for sublist in logm], 
+        'LOGM_max': [sublist[1] for sublist in logm], 
+        'LOGSFR_min': [sublist[0] for sublist in logsfr], 
+        'LOGSFR_max': [sublist[1] for sublist in logsfr], 
+        'AGNLUM_min': [sublist[0] for sublist in agnlum], 
+        'AGNLUM_max': [sublist[1] for sublist in agnlum]
+    }
+    
+    new_tab = Table(data)
+
+    return new_tab
