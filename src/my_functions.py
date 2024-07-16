@@ -29,7 +29,7 @@ def eshow(x,**kwargs):
 # - dict = {'Param_1': [lower_bound, upper_bound], 'Param_2': [lower_bound, upper_bound], etc}
 
 # notes: key in 'Param_number' needs to match how it is written in the column name of the data
-def cutting(file_name, dict):
+def cutting(file_name, dict, save=False, name=None):
     data=Table.read(file_name+'.fits', format='fits')
     for key in dict:
         my_min=dict[key][0]
@@ -38,6 +38,12 @@ def cutting(file_name, dict):
         new_tab=data[condition_1]
         condition_2=new_tab[key] <= my_max
         data=new_tab[condition_2] #rewrites what the data table so if there are multiple param boundaries it works with the already edited table
+    
+    if save:
+        if name == None:
+            name = 'altered_table'
+        table_path=name+".fits"
+        data.write(table_path, format='fits', overwrite=True)
     
     print('- Property boundaries applied')
     return data #returns a viewable table
@@ -126,10 +132,11 @@ def mapping(map_name, save=False, save_name=None):
 # arguements: 
 # - act_map: filename (with .fits and/or .txt extension; string)
 # - planck_map: filename (with .fits and/or .txt extension; string)
+# - ps_map: filename (with .fits and/or .txt extension; string)
 # - save: if user wants to save the mask as fits (True/ False)
 # - save_name: name of file the map will save as. do not add .fits, function does so. (string)
 
-def masking(act_map, planck_map, save=False, save_name=None):
+def masking(act_map, planck_map, ps_map, save=False, save_name=None):
     print('- Mask: Importing CMB Map')
     CMBmap = enmap.read_map(act_map)
     
@@ -141,6 +148,10 @@ def masking(act_map, planck_map, save=False, save_name=None):
     elif len(CMBmap.shape) <= 2:
         CMBmap_edit = np.logical_not(CMBmap == 0).astype(int)
 
+    # point source map: no polarization to remove
+    print('- Mask: Importing Point Source Map')
+    pointSource_map = enmap.read_map(ps_map)
+
     print('- Mask: Importing Planck mask')
     # planck map mask
     pmap_fname = hp.read_map(planck_map)
@@ -149,7 +160,7 @@ def masking(act_map, planck_map, save=False, save_name=None):
     planck_map = reproject.healpix2map(pmap_fname, CMBmap_edit.shape, CMBmap_edit.wcs, rot=None, method='spline', spin=[0], order=0)
 
     # result of all processes
-    result = planck_map*CMBmap_edit
+    result = planck_map*CMBmap_edit*pointSource_map
 
     if save:
         that_name = save_name + '.fits'
@@ -238,3 +249,66 @@ def binning(table_name, n_bins, gal_property, printed=False, tabled=False):
     new_tab = Table(data)
 
     return new_tab
+
+
+########################################################## stacked_plot
+# description: runs thumbstack given 
+
+# requirements: fits table, map, mask
+
+# notes: run the masking and mapping func seperately and save them so this func is not re-running the functions every loop
+
+# arguements: 
+# - catalog_name: name of file (without .fits extension ; string)
+# - cmb_map: map already ran through mapping (.fits)
+# - mask: mask already ran through mask (.fits)
+# - n_bins: number of bins
+# - gal_property: property to be binned by (current capabilities are for z, logm, logsfr, or agnlum); string
+# - name: run output name (string)
+def stacked_plot(catalog_name, cmb_map, mask, n_bins, gal_property, name):
+    
+    # run binning
+    boundaries = binning(catalog_name, n_bins, gal_property, tabled=True)
+
+    # run thumbstack with 
+    for i in range(n_bins):
+        outName = name + '_bin' + str(i+1)
+        this_min = gal_property + '_min'
+        this_max = gal_property + '_max'
+        prop_dict = {} # clears dictionary from prev loop
+        prop_dict = {gal_property: [boundaries[this_min][i], boundaries[this_max][i]]}
+
+        ThumbStack(cutting(catalog_name, prop_dict), 
+                   cmb_map, 
+                   mask, 
+                   name=outName,
+                   nameLong=None, 
+                   save=True, 
+                   nProc=32,
+                   filterTypes='ringring2',
+                   #doMBins=False, 
+                   doBootstrap=True,
+                   # doStackedMap=True,
+                   #doVShuffle=False, 
+                   #cmbNu=cmap.nu, 
+                   #cmbUnitLatex=cmap.unitLatex,
+                   pathOut='')
+    
+    # plotting
+    plt.figure()
+    for i in range(n_bins):
+        fits_name = 'figures/thumbstack/' + name + '_bin' + str(i+1) + '/ringring2_tsz_uniformweight.fits'
+        fits_file = Table.read(fits_name, format='fits')
+        cap_name = 'bin ' + str(i+1)
+        plt.errorbar(fits_file['R'], fits_file['T'], yerr = fits_file['error'], alpha=0.4, label=cap_name)
+    
+    plt.xlabel(r'$R$ [arcmin]')
+    plt.ylabel(r'$T$ [$\mu K\cdot\mathrm{arcmin}^2$]')
+    plt.legend()
+    
+    fig_name=name+'_profile.png'
+    plt.savefig(fig_name)
+    
+    plt.show()
+    
+    return

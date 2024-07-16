@@ -1,0 +1,15 @@
+*** tsz_uniformweight SNR ***
+number of dof:9
+null chi2Null=12.041661692754246
+null pte=0.21097079775029126
+null pte significance=1.2509004553104053sigmas
+
+best-fit amplitude=1.1549232818270421e-06
+number of dof:8
+
+best-fit chi2=10.761606669735922
+best-fit pte=0.2155761796580451
+best-fit pte significance=1.2383773375728566sigmas
+
+best-fit sqrt(delta chi2)=1.1313951666055164sigmas
+pte (if Gaussian)=0.2578888049449396
