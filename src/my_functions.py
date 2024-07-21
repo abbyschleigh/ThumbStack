@@ -172,23 +172,19 @@ def masking(act_map, planck_map, ps_map, save=False, save_name=None):
 
 
 ########################################################## binning
-# description: bins galaxies based on a physical property and into (generally) equal groups
+# description: bins galaxies based on a physical property and into (generally) equal groups, outputs table of several property min/ max of bins
 
 # requirements: fits table
+
+# notes: binning automatically outputs the following properties: 'RA', 'DEC', 'Z', 'LOGM', 'LOGSFR', 'AGNLUM'. adding these values to the add_val list is not necessary, but will not break the func if you do
 
 # arguements: 
 # - table_name: name of file (without .fits extension ; string)
 # - n_bins: number of bins
 # - gal_property: property to be binned by (current capabilities are for z, logm, logsfr, or agnlum); string
-# - printed: if you want the min and max info printed
-# - tabled: if you want the min and max info in an astropy table
+# - add_val: list of other paramaters from the data which can be binned or view binned min/max (list of strings)
 
-def binning(table_name, n_bins, gal_property, printed=False, tabled=False):
-    # flag if printed or tabled is not specified
-    if printed == False and tabled == False:
-        print('Error: Choose if printed or tabled')
-        return
-
+def binning(table_name, n_bins, gal_property, add_val=None):
     table = Table.read(table_name+'.fits', format='fits')
 
     # sort table based on the property provided
@@ -200,12 +196,24 @@ def binning(table_name, n_bins, gal_property, printed=False, tabled=False):
     remainder = length % n_bins
     bins = [base_value + 1 if i < remainder else base_value for i in range(n_bins)] #list of bin amount
 
-    if tabled:
-        z = []
-        logm = []
-        logsfr = []
-        agnlum = []
+    original = []
+    original = ['RA', 'DEC', 'Z', 'LOGM', 'LOGSFR', 'AGNLUM']
 
+    if add_val != None:
+        for i in range(len(add_val)):
+            while add_val[i] not in original: # added so if user adds already used vals into add_val, there won't be double columns
+                original.append(add_val[i])
+
+    if gal_property not in original:
+        original.append(gal_property)
+
+    out_add_val = {'n_objects': bins}
+    for name in original:
+        outMin = name + '_min'
+        outMax = name + '_max'
+        out_add_val[outMin] = []
+        out_add_val[outMax] = []
+    
     starting = 0
     for i in range(n_bins):
         ending = starting + bins[i]
@@ -214,39 +222,14 @@ def binning(table_name, n_bins, gal_property, printed=False, tabled=False):
         cut_table = sorted_tab[starting:ending]
 
         starting += bins[i]
-        
-        if printed:
-            print('------------------ Bin ', i+1, ' ------------------')
-            print('')
-            print('# galaxies : ', len(cut_table))
-            print('RA min/max : ', cut_table['RA'].min(), ' / ', cut_table['RA'].max())
-            print('LOGM min/max : ', cut_table['LOGM'].min(), ' / ', cut_table['LOGM'].max())
-            print('LOGSFR min/max : ', cut_table['LOGSFR'].min(), ' / ', cut_table['LOGSFR'].max())
-            print('AGNLUM min/max : ', cut_table['AGNLUM'].min(), ' / ', cut_table['AGNLUM'].max())
-            print('')
 
-        if tabled:
-            z.append([cut_table['RA'].min(), cut_table['RA'].max()])
-            logm.append([cut_table['LOGM'].min(), cut_table['LOGM'].max()])
-            logsfr.append([cut_table['LOGSFR'].min(), cut_table['LOGSFR'].max()])
-            agnlum.append([cut_table['AGNLUM'].min(), cut_table['AGNLUM'].max()])
+        for name in original:
+            outMin = outMin = name + '_min'
+            outMax = name + '_max'
+            out_add_val[outMin].extend([cut_table[name].min()])
+            out_add_val[outMax].extend([cut_table[name].max()])
 
-    if printed:
-        return
-    
-    data = {
-        'n_galaxies': bins, 
-        'RA_min': [sublist[0] for sublist in z], 
-        'RA_max': [sublist[1] for sublist in z], 
-        'LOGM_min': [sublist[0] for sublist in logm], 
-        'LOGM_max': [sublist[1] for sublist in logm], 
-        'LOGSFR_min': [sublist[0] for sublist in logsfr], 
-        'LOGSFR_max': [sublist[1] for sublist in logsfr], 
-        'AGNLUM_min': [sublist[0] for sublist in agnlum], 
-        'AGNLUM_max': [sublist[1] for sublist in agnlum]
-    }
-    
-    new_tab = Table(data)
+    new_tab = Table(out_add_val)
 
     return new_tab
 
@@ -268,7 +251,7 @@ def binning(table_name, n_bins, gal_property, printed=False, tabled=False):
 def stacked_plot(catalog_name, cmb_map, mask, n_bins, gal_property, name):
     
     # run binning
-    boundaries = binning(catalog_name, n_bins, gal_property, tabled=True)
+    boundaries = binning(catalog_name, n_bins, gal_property)
 
     # run thumbstack with 
     for i in range(n_bins):
