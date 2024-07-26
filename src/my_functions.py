@@ -5,6 +5,7 @@ import sys
 sys.path.append('../src/')
 
 from headers import *
+from thumbstack import ThumbStack
 
 from astropy.table import Table
 import astropy
@@ -224,7 +225,7 @@ def binning(table_name, n_bins, gal_property, add_val=None):
         starting += bins[i]
 
         for name in original:
-            outMin = outMin = name + '_min'
+            outMin = name + '_min'
             outMax = name + '_max'
             out_add_val[outMin].extend([cut_table[name].min()])
             out_add_val[outMax].extend([cut_table[name].max()])
@@ -283,15 +284,15 @@ def stacked_plot(catalog_name, cmb_map, mask, n_bins, gal_property, name):
         fits_name = 'figures/thumbstack/' + name + '_bin' + str(i+1) + '/ringring2_tsz_uniformweight.fits'
         fits_file = Table.read(fits_name, format='fits')
         cap_name = 'bin ' + str(i+1)
-        plt.errorbar(fits_file['R'], fits_file['T'], yerr = fits_file['error'], alpha=0.4, label=cap_name)
+        plt.errorbar(fits_file['R'], fits_file['T'], yerr = fits_file['error'], alpha=0.4, label=cap_name, capsize=4)
     
     plt.xlabel(r'$R$ [arcmin]')
     plt.ylabel(r'$T$ [$\mu K\cdot\mathrm{arcmin}^2$]')
+    title = 'tSZ profile binned by ' + gal_property
+    plt.title(title)
     plt.legend()
     
     fig_name=name+'_profile.png'
     plt.savefig(fig_name)
-    
-    plt.show()
     
     return
