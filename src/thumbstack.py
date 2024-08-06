@@ -133,7 +133,7 @@ class ThumbStack(object):
 
         if save:
             self.plotAllStackedProfiles()
-            #self.plotAllCov() commented out because we want to focus on stacked profiles
+            self.plotAllCov()
             self.computeAllSnr()
 
         # if save:

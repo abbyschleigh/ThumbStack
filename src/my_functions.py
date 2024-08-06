@@ -9,6 +9,7 @@ from thumbstack import ThumbStack
 
 from astropy.table import Table
 import astropy
+from astropy import units as u
 
 from pixell import enmap, enplot, reproject, utils, curvedsky 
 import numpy as np
@@ -137,7 +138,11 @@ def mapping(map_name, save=False, save_name=None):
 # - save: if user wants to save the mask as fits (True/ False)
 # - save_name: name of file the map will save as. do not add .fits, function does so. (string)
 
-def masking(act_map, planck_map, ps_map, save=False, save_name=None):
+def masking(act_map, planck_map=None, ps_map=None, save=False, save_name=None):
+    if save is True and save_name is None:
+        print('Error: save input is True but has no save_name. Make a save_name to continue')
+        return
+    
     print('- Mask: Importing CMB Map')
     CMBmap = enmap.read_map(act_map)
     
@@ -145,23 +150,24 @@ def masking(act_map, planck_map, ps_map, save=False, save_name=None):
     print('- Mask: Remove Polarization and have all int>1 become 1')
     if len(CMBmap.shape) > 2:
         CMBmap = CMBmap[0]
-        CMBmap_edit = np.logical_not(CMBmap == 0).astype(int)
+        result = np.logical_not(CMBmap == 0).astype(int)
     elif len(CMBmap.shape) <= 2:
-        CMBmap_edit = np.logical_not(CMBmap == 0).astype(int)
+        result = np.logical_not(CMBmap == 0).astype(int)
+    
+    if ps_map is not None:
+        # point source map: no polarization to remove
+        print('- Mask: Importing Point Source Map')
+        pointSource_map = enmap.read_map(ps_map)
+        result *= pointSource_map
 
-    # point source map: no polarization to remove
-    print('- Mask: Importing Point Source Map')
-    pointSource_map = enmap.read_map(ps_map)
+    if planck_map is not None:
+        print('- Mask: Importing Planck mask')
+        # planck map mask
+        pmap_fname = hp.read_map(planck_map)
 
-    print('- Mask: Importing Planck mask')
-    # planck map mask
-    pmap_fname = hp.read_map(planck_map)
-
-    print('- Mask: Changing Planck mask to pixell friendly')
-    planck_map = reproject.healpix2map(pmap_fname, CMBmap_edit.shape, CMBmap_edit.wcs, rot=None, method='spline', spin=[0], order=0)
-
-    # result of all processes
-    result = planck_map*CMBmap_edit*pointSource_map
+        print('- Mask: Changing Planck mask to pixell friendly')
+        pix_planck_map = reproject.healpix2map(pmap_fname, CMBmap.shape, CMBmap.wcs, rot=None, method='spline', spin=[0], order=0)
+        result *= pix_planck_map
 
     if save:
         that_name = save_name + '.fits'
@@ -253,12 +259,12 @@ def stacked_plot(catalog_name, cmb_map, mask, n_bins, gal_property, name):
     
     # run binning
     boundaries = binning(catalog_name, n_bins, gal_property)
+    this_min = gal_property + '_min'
+    this_max = gal_property + '_max'
 
     # run thumbstack with 
     for i in range(n_bins):
         outName = name + '_bin' + str(i+1)
-        this_min = gal_property + '_min'
-        this_max = gal_property + '_max'
         prop_dict = {} # clears dictionary from prev loop
         prop_dict = {gal_property: [boundaries[this_min][i], boundaries[this_max][i]]}
 
@@ -279,20 +285,36 @@ def stacked_plot(catalog_name, cmb_map, mask, n_bins, gal_property, name):
                    pathOut='')
     
     # plotting
+    print('- Stacked Plot: Creating Plot')
+    data=Table.read(catalog_name+'.fits', format='fits')
+    
+    ff = 18
+    plt.rcParams["figure.figsize"] = (8,6)
     plt.figure()
+
+    if str(data[gal_property].unit) == 'None':
+        units = ''
+        
+    elif str(data[gal_property].unit) != 'None':
+        units = ' ' + '[' + str(data[gal_property].unit) + ']'
+        
     for i in range(n_bins):
         fits_name = 'figures/thumbstack/' + name + '_bin' + str(i+1) + '/ringring2_tsz_uniformweight.fits'
         fits_file = Table.read(fits_name, format='fits')
-        cap_name = 'bin ' + str(i+1)
-        plt.errorbar(fits_file['R'], fits_file['T'], yerr = fits_file['error'], alpha=0.4, label=cap_name, capsize=4)
+        cap_name = str(round(boundaries[this_min][i], 3)) + '< '+ gal_property + ' <' + str(round(boundaries[this_max][i], 3)) 
+        plt.errorbar(fits_file['R'], fits_file['T'], yerr = fits_file['error'], alpha=0.4, label = cap_name, capsize=4, linewidth=3)
+
+    plt.axhline(y=0, color='black', linewidth=1, linestyle='--')
+    plt.xlabel(r'$R$ [arcmin]', fontsize=ff)
+    plt.ylabel(r'$T$ [$\mu K\cdot\mathrm{arcmin}^2$]', fontsize=ff)
+    title = 'tSZ signal binned by ' + gal_property + units
+    plt.title(title, fontsize=ff)
+    plt.legend(fontsize=14)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
     
-    plt.xlabel(r'$R$ [arcmin]')
-    plt.ylabel(r'$T$ [$\mu K\cdot\mathrm{arcmin}^2$]')
-    title = 'tSZ profile binned by ' + gal_property
-    plt.title(title)
-    plt.legend()
-    
-    fig_name=name+'_profile.png'
+    fig_name=name+'_profile.pdf'
     plt.savefig(fig_name)
+    plt.close()
     
     return
