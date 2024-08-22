@@ -27,12 +27,12 @@ def eshow(x,**kwargs):
 # requirments: fits file
 
 # arguements:
-# - file_name: name of file (without .fits extension ; string)
+# - file_name: name of file in fits format (string)
 # - dict = {'Param_1': [lower_bound, upper_bound], 'Param_2': [lower_bound, upper_bound], etc}
 
 # notes: key in 'Param_number' needs to match how it is written in the column name of the data
 def cutting(file_name, dict, save=False, name=None):
-    data=Table.read(file_name+'.fits', format='fits')
+    data=Table.read(file_name, format='fits')
     for key in dict:
         my_min=dict[key][0]
         my_max=dict[key][1]
@@ -106,9 +106,9 @@ def massage(data_table, directory_name):
 # arguements: 
 # - map_name: filename (with .fits and/or .txt extension; string)
 # - save: if user wants to save the mask as fits (True/ False)
-# - save_name: name of file the map will save as. do not add .fits, function does so. (string)
+# - name: name of file the map will save as. do not add .fits, function does so. (string)
 
-def mapping(map_name, save=False, save_name=None):
+def mapping(map_name, save=False, name=None):
     print('- Map: Importing CMB map')
     result = enmap.read_map(map_name)
 
@@ -118,7 +118,7 @@ def mapping(map_name, save=False, save_name=None):
         result = result[0]
 
     if save:
-        that_name = save_name + '.fits'
+        that_name = name + '.fits'
         print('- Map: Saving map as '+that_name)
         enmap.write_map(that_name, result)
 
@@ -132,15 +132,15 @@ def mapping(map_name, save=False, save_name=None):
 # requirements: ACT map, planck map
 
 # arguements: 
-# - act_map: filename (with .fits and/or .txt extension; string)
-# - planck_map: filename (with .fits and/or .txt extension; string)
-# - ps_map: filename (with .fits and/or .txt extension; string)
+# - act_map: CMB footprint; filename (with .fits and/or .txt extension; string)
+# - planck_map: galacitc mask; filename (with .fits and/or .txt extension; string)
+# - ps_map: point source mask; filename (with .fits and/or .txt extension; string)
 # - save: if user wants to save the mask as fits (True/ False)
-# - save_name: name of file the map will save as. do not add .fits, function does so. (string)
+# - name: name of file the map will save as. do not add .fits, function does so. (string)
 
-def masking(act_map, planck_map=None, ps_map=None, save=False, save_name=None):
-    if save is True and save_name is None:
-        print('Error: save input is True but has no save_name. Make a save_name to continue')
+def masking(act_map, planck_map=None, ps_map=None, save=False, name=None):
+    if save is True and name is None:
+        print('Error: save input is True but has no save name. Make a name= to continue')
         return
     
     print('- Mask: Importing CMB Map')
@@ -157,7 +157,7 @@ def masking(act_map, planck_map=None, ps_map=None, save=False, save_name=None):
     if ps_map is not None:
         # point source map: no polarization to remove
         print('- Mask: Importing Point Source Map')
-        pointSource_map = enmap.read_map(ps_map)
+        pointSource_map = enmap.read_map(ps_map).astype(np.int64)
         result *= pointSource_map
 
     if planck_map is not None:
@@ -170,7 +170,7 @@ def masking(act_map, planck_map=None, ps_map=None, save=False, save_name=None):
         result *= pix_planck_map
 
     if save:
-        that_name = save_name + '.fits'
+        that_name = name + '.fits'
         print('- Mask: Saving mask as '+that_name)
         enmap.write_map(that_name, result)
 
@@ -186,13 +186,13 @@ def masking(act_map, planck_map=None, ps_map=None, save=False, save_name=None):
 # notes: binning automatically outputs the following properties: 'RA', 'DEC', 'Z', 'LOGM', 'LOGSFR', 'AGNLUM'. adding these values to the add_val list is not necessary, but will not break the func if you do
 
 # arguements: 
-# - table_name: name of file (without .fits extension ; string)
+# - table_name: name of file in fits format (string)
 # - n_bins: number of bins
-# - gal_property: property to be binned by (current capabilities are for z, logm, logsfr, or agnlum); string
+# - gal_property: property to be binned by (string)
 # - add_val: list of other paramaters from the data which can be binned or view binned min/max (list of strings)
 
 def binning(table_name, n_bins, gal_property, add_val=None):
-    table = Table.read(table_name+'.fits', format='fits')
+    table = Table.read(table_name, format='fits')
 
     # sort table based on the property provided
     sorted_tab = table[table[gal_property].argsort()]
@@ -204,7 +204,7 @@ def binning(table_name, n_bins, gal_property, add_val=None):
     bins = [base_value + 1 if i < remainder else base_value for i in range(n_bins)] #list of bin amount
 
     original = []
-    original = ['RA', 'DEC', 'Z', 'LOGM', 'LOGSFR', 'AGNLUM']
+    original = ['RA', 'DEC', 'Z', 'LOGM', 'LOGSFR', 'AGNLUM'] # based on DESI column names
 
     if add_val != None:
         for i in range(len(add_val)):
@@ -242,23 +242,23 @@ def binning(table_name, n_bins, gal_property, add_val=None):
 
 
 ########################################################## stacked_plot
-# description: runs thumbstack given 
+# description: runs thumbstack for different bins of a property and returns a plot of the profile for all the bins
 
 # requirements: fits table, map, mask
 
 # notes: run the masking and mapping func seperately and save them so this func is not re-running the functions every loop
 
 # arguements: 
-# - catalog_name: name of file (without .fits extension ; string)
+# - table_name: name of file in fits format (string)
 # - cmb_map: map already ran through mapping (.fits)
 # - mask: mask already ran through mask (.fits)
 # - n_bins: number of bins
 # - gal_property: property to be binned by (current capabilities are for z, logm, logsfr, or agnlum); string
 # - name: run output name (string)
-def stacked_plot(catalog_name, cmb_map, mask, n_bins, gal_property, name):
+def stacked_plot(table_name, cmb_map, mask, n_bins, gal_property, name):
     
     # run binning
-    boundaries = binning(catalog_name, n_bins, gal_property)
+    boundaries = binning(table_name, n_bins, gal_property)
     this_min = gal_property + '_min'
     this_max = gal_property + '_max'
 
@@ -268,7 +268,7 @@ def stacked_plot(catalog_name, cmb_map, mask, n_bins, gal_property, name):
         prop_dict = {} # clears dictionary from prev loop
         prop_dict = {gal_property: [boundaries[this_min][i], boundaries[this_max][i]]}
 
-        ThumbStack(cutting(catalog_name, prop_dict), 
+        ThumbStack(cutting(table_name, prop_dict), 
                    cmb_map, 
                    mask, 
                    name=outName,
@@ -286,7 +286,7 @@ def stacked_plot(catalog_name, cmb_map, mask, n_bins, gal_property, name):
     
     # plotting
     print('- Stacked Plot: Creating Plot')
-    data=Table.read(catalog_name+'.fits', format='fits')
+    data=Table.read(table_name, format='fits')
     
     ff = 18
     plt.rcParams["figure.figsize"] = (8,6)
