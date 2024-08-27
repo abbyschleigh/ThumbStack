@@ -50,6 +50,7 @@ class ThumbStack(object):
         self.doBootstrap = doBootstrap
         self.cmbNu = cmbNu
         self.cmbUnitLatex = cmbUnitLatex
+        self.counter=0
 
         self.rApInnerRad = rApInnerRad
         self.rApMinArcmin = rApMinArcmin
@@ -916,7 +917,10 @@ class ThumbStack(object):
         elif est == 'tsz_varweight':
             weights = 1./s2Full
             norm = 1./np.sum(weights, axis=0)
-
+        
+        if self.counter == 0:
+            np.savetxt(self.pathOut+"/object_profiles.txt", t)
+            self.counter=1.
 
         # return the stacked profiles
         if not stackedMap:
@@ -1195,7 +1199,7 @@ class ThumbStack(object):
             filterType = self.filterTypes[iFilterType]
 
             # check AP filter histograms
-#         self.plotFilterHistograms(filterType)
+            #self.plotFilterHistograms(filterType)
 
             # Estimators (tSZ, kSZ, various weightings...)
             for iEst in range(len(self.Est)):
