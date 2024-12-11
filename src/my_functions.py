@@ -301,7 +301,10 @@ def stacked_plot(table_name, cmb_map, mask, n_bins, gal_property, name):
     for i in range(n_bins):
         fits_name = 'figures/thumbstack/' + name + '_bin' + str(i+1) + '/ringring2_tsz_uniformweight.fits'
         fits_file = Table.read(fits_name, format='fits')
-        cap_name = str(round(boundaries[this_min][i], 3)) + '< '+ gal_property + ' <' + str(round(boundaries[this_max][i], 3)) 
+        if gal_property == 'AGNLUM':
+            cap_name = "{:.4e}".format(boundaries[this_min][i]) + '< '+ gal_property + ' <' + "{:.4e}".format(boundaries[this_max][i])
+        else: 
+            cap_name = str(round(boundaries[this_min][i], 3)) + '< '+ gal_property + ' <' + str(round(boundaries[this_max][i], 3))
         plt.errorbar(fits_file['R'], fits_file['T'], yerr = fits_file['error'], alpha=0.4, label = cap_name, capsize=4, linewidth=3)
 
     plt.axhline(y=0, color='black', linewidth=1, linestyle='--')
@@ -318,3 +321,67 @@ def stacked_plot(table_name, cmb_map, mask, n_bins, gal_property, name):
     plt.close()
     
     return
+
+########################################################## pdf_hist
+# description: generates array and pdf histogram for all objects in run
+
+# requirements: name of thumbstack run
+
+# arguements: 
+# - table_name: name of thumbstack run (string)
+# - column: column of txt file assessed (int; optional)
+# - bins: number of bins for histogram (int; optional)
+# - profile_plot: if you want an output viewable plot (True/ False; optional)
+def pdf_hist(name, column=-1, bins=100, profile_plot=False):
+    arr=np.genfromtxt('output/thumbstack/'+name+'/object_profiles.txt')
+    plt.hist(arr[:,column],bins=bins)
+    
+    if profile_plot:
+        m = np.mean(arr,axis=0)
+        plt.plot(m)
+        plt.close()
+    
+    return arr
+
+
+########################################################## chi2
+# description: creates chi2 value between two thumbstack runs
+
+# requirements: name of thumbstack runs (2)
+
+#notes: if assessing between 2 bins ran via stacked_plot(), the names in the chi2 func would be 'name_bin#' where the name in the '' is the name ran in the stacked_plot func
+
+# arguements: 
+# - name1/2: name of thumbstack run (string)
+def chi2(name1, name2):
+    bin1_cov= np.genfromtxt('output/thumbstack/'+name1+'/cov_ringring2_tsz_uniformweight_bootstrap.txt')
+    bin2_cov= np.genfromtxt('output/thumbstack/'+name2+'/cov_ringring2_tsz_uniformweight_bootstrap.txt')
+    bin1_prof=np.genfromtxt('output/thumbstack/'+name1+'/ringring2_tsz_uniformweight_measured.txt')[:,1]
+    bin2_prof=np.genfromtxt('output/thumbstack/'+name2+'/ringring2_tsz_uniformweight_measured.txt')[:,1]
+
+    v1 = bin1_prof - bin2_prof
+    m = bin1_cov + bin2_cov
+    m1 = np.linalg.inv(m)
+    v2 = np.dot(v1,m1)
+    result = np.dot(v2, v1)
+
+    return result
+
+########################################################## snr
+# description: creates snr value of a single thumbstack run
+
+# requirements: name of thumbstack run
+
+#notes: this should be done using a thumbstack run of all objects, not divied up bin. this will create a larger snr value
+
+# arguements: 
+# - name: name of thumbstack run (string)
+
+def snr(name):
+    cov= np.genfromtxt('output/thumbstack/'+name+'/cov_ringring2_tsz_uniformweight_bootstrap.txt')
+    prof=np.genfromtxt('output/thumbstack/'+name+'/ringring2_tsz_uniformweight_measured.txt')[:,1]
+
+    m= np.linalg.inv(cov)
+    v=np.dot(prof,m)
+    
+    return np.sqrt(np.dot(v,prof))
