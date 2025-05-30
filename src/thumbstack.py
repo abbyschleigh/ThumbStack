@@ -35,7 +35,7 @@ class TableReader(object):
 
 class ThumbStack(object):
 
-    def __init__(self, table, cmbMap, cmbMask, cmbHit=None, name="test", nameLong=None, save=False, nProc=1, filterTypes='diskring', doStackedMap=False, doBootstrap=False, cmbNu=150.e9, cmbUnitLatex=r'$\mu$K', pathOut=pathOut, rApMinArcmin=2., rApMaxArcmin=6., rApInnerRad=1.):
+    def __init__(self, table, cmbMap, cmbMask, cmbHit=None, name="test", nameLong=None, save=False, nProc=1, filterTypes='diskring', doStackedMap=False, doBootstrap=False, cmbNu=150.e9, cmbUnitLatex=r'$\mu$K', pathOut=pathOut, rApMinArcmin=2., rApMaxArcmin=6., rApInnerRad=1., wt=None):
 
         self.nProc = nProc
         self.Catalog = TableReader(table,name=name) # table is assumed to be an astropy table
@@ -55,6 +55,7 @@ class ThumbStack(object):
         self.rApInnerRad = rApInnerRad
         self.rApMinArcmin = rApMinArcmin
         self.rApMaxArcmin = rApMaxArcmin
+        self.custom_1d_weights = wt
         
         # aperture photometry filters to implement
         if filterTypes == 'diskring':
@@ -876,7 +877,7 @@ class ThumbStack(object):
         s2Full = ts.filtVarTrue[filterType][mask, :]
         # Variance from hit count (if available)
         s2Hit = ts.filtHitNoiseStdDev[filterType][mask, :]**2
-        # print "Shape of s2Hit = ", s2Hit.shape
+        #print ("Shape of s2Hit = ", s2Hit.shape)
         # halo masses
 
         if iBootstrap is not None:
@@ -906,17 +907,24 @@ class ThumbStack(object):
             J = np.random.permutation(I)
 
         # tSZ: uniform weighting
-        if est == 'tsz_uniformweight':
+        if self.custom_1d_weights is None:
+            if est == 'tsz_uniformweight':
+                weights = np.ones_like(s2Hit)
+                norm = 1./np.sum(weights, axis=0)
+            # tSZ: detector-noise weighted (hit count)
+            elif est == 'tsz_hitweight':
+                weights = 1./s2Hit
+                norm = 1./np.sum(weights, axis=0)
+            # tSZ: full noise weighted (detector noise + CMB)
+            elif est == 'tsz_varweight':
+                weights = 1./s2Full
+                norm = 1./np.sum(weights, axis=0)
+
+        elif self.custom_1d_weights is not None:
             weights = np.ones_like(s2Hit)
-            norm = 1./np.sum(weights, axis=0)
-        # tSZ: detector-noise weighted (hit count)
-        elif est == 'tsz_hitweight':
-            weights = 1./s2Hit
-            norm = 1./np.sum(weights, axis=0)
-        # tSZ: full noise weighted (detector noise + CMB)
-        elif est == 'tsz_varweight':
-            weights = 1./s2Full
-            norm = 1./np.sum(weights, axis=0)
+            for i in range(9): 
+                weights[:, i] = self.custom_1d_weights
+            norm = 1/np.sum(weights, axis=0)
         
         if self.counter == 0:
             np.savetxt(self.pathOut+"/object_profiles.txt", t)
