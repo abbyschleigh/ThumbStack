@@ -176,9 +176,6 @@ class individualWeightedPlot(object):
         blank=Table()
         blank.write(tableName+'wProfiles.fits', overwrite=True)
 
-        fits_name = 'figures/thumbstack/50n_max0.7_wo_weights_117.0/ringring2_tsz_uniformweight.fits'
-        fits_file = Table.read(fits_name, format='fits')
-
         this_data=self.table
 
         for i in range(len(outputs[:,0])):
