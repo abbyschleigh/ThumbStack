@@ -17,13 +17,15 @@ from thumbstack import ThumbStack
 
 class individualWeightedPlot(object):
 
-    def __init__(self, tableName, outName='50n_max0.7', split=True, save=False, tsCompute=False, outputFile='outputs.txt', mapPath='tsz', maskPath='masks', zLim=0.7):
+    def __init__(self, tableName, outName='50n_max0.7', capFilter='ringring2', resolution=1., split=True, save=False, tsCompute=False, outputFile='outputs.txt', mapPath='tsz', maskPath='masks', zLim=0.7):
         
-        self.name = outName
+        self.outName = outName
         self.output = np.loadtxt(outputFile)
         self.zLim = zLim
         self.mapPath = mapPath
         self.maskPath = maskPath
+        self.capFilter = capFilter
+        self.res=resolution
 
         if save:
             uwTable=self.computeFeedbackSplit(tableName)
@@ -37,7 +39,7 @@ class individualWeightedPlot(object):
             if not split:
                 self.table=self.tsFullRun(tableName)
 
-        self.name = outName
+        self.outName = outName
         self.plotIndivWeight()
 
 
@@ -94,10 +96,10 @@ class individualWeightedPlot(object):
         outputs = self.output
         mapPath = self.mapPath
         maskPath = self.maskPath
-        name = self.name
+        name = self.outName
 
         blank=Table()
-        blank.write(tableName+'wProfiles.fits', overwrite=True)
+        blank.write(name+'wProfiles.fits', overwrite=True)
 
         this_data=self.table
 
@@ -108,7 +110,15 @@ class individualWeightedPlot(object):
                 continue
             else:
                 num  = int(outputs[i,2])
-                mapped = enmap.read_map(f"{mapPath}/tmap_{SIMTYPE}_npix-4096_{num}.fits")
+                gg = enmap.read_map(f"{mapPath}/tmap_{SIMTYPE}_npix-4096_{num}.fits")
+
+                ggf= enmap.fft(gg, normalize='phys')
+                modl= gg.modlmap()
+                theta=self.res/60*np.pi/180
+                
+                bmap=np.exp(-(theta*modl)**2/16/np.log(2))
+                ggc=np.real(enmap.ifft(ggf*bmap, normalize='phys'))
+                
                 masked = enmap.read_map(f"{maskPath}/tmap_{SIMTYPE}_npix-4096_{num}_mask.fits")
             
                 this_data1 = this_data[(this_data['Z']==outputs[i, 1]) & (this_data['fdb']>=0)]
@@ -117,13 +127,13 @@ class individualWeightedPlot(object):
                 this_name2 = f"{name}_hi_{num}"
         
                 ts = ThumbStack(this_data1, 
-                                mapped, 
+                                ggc, 
                                 masked, 
                                 name=this_name1,
                                 nameLong=None, 
                                 save=True,
                                 nProc=32,
-                                filterTypes='ringring2',
+                                filterTypes=self.capFilter,
                                 #doMBins=False, 
                                 doBootstrap=True,
                                 # doStackedMap=True,
@@ -138,13 +148,13 @@ class individualWeightedPlot(object):
                 this_data1.write('output/thumbstack/'+this_name1+'/objTable.fits', overwrite=True)
                 
                 ts = ThumbStack(this_data2, 
-                                mapped, 
+                                ggc, 
                                 masked, 
                                 name=this_name2,
                                 nameLong=None, 
                                 save=True,
                                 nProc=32,
-                                filterTypes='ringring2',
+                                filterTypes=self.capFilter,
                                 #doMBins=False, 
                                 doBootstrap=True,
                                 # doStackedMap=True,
@@ -158,12 +168,12 @@ class individualWeightedPlot(object):
                 this_data2['profile']=np.loadtxt('output/thumbstack/'+this_name2+'/ringring2_filtmap.txt')*(180*60/np.pi)**2
                 this_data2.write('output/thumbstack/'+this_name2+'/objTable.fits', overwrite=True)
         
-                gen = Table.read(tableName+'wProfiles.fits', overwrite=True)
+                gen = Table.read(name+'wProfiles.fits')
                 
                 both = vstack([this_data1, this_data2])
                 merged_table = vstack([gen, both])
         
-                merged_table.write(tableName+'wProfiles.fits', overwrite=True)
+                merged_table.write(name+'wProfiles.fits', overwrite=True)
 
         return merged_table
 
@@ -171,10 +181,10 @@ class individualWeightedPlot(object):
         outputs = self.output
         mapPath = self.mapPath
         maskPath = self.maskPath
-        name = self.name
+        name = self.outName
 
         blank=Table()
-        blank.write(tableName+'wProfiles.fits', overwrite=True)
+        blank.write(name+'wProfiles.fits', overwrite=True)
 
         this_data=self.table
 
@@ -185,20 +195,28 @@ class individualWeightedPlot(object):
                 continue
             else:
                 num  = int(outputs[i,2])
-                mapped = enmap.read_map(f"{mapPath}/tmap_{SIMTYPE}_npix-4096_{num}.fits")
+                gg = enmap.read_map(f"{mapPath}/tmap_{SIMTYPE}_npix-4096_{num}.fits")
+
+                ggf= enmap.fft(gg, normalize='phys')
+                modl= gg.modlmap()
+                theta=self.res/60*np.pi/180
+                
+                bmap=np.exp(-(theta*modl)**2/16/np.log(2))
+                ggc=np.real(enmap.ifft(ggf*bmap, normalize='phys'))
+                
                 masked = enmap.read_map(f"{maskPath}/tmap_{SIMTYPE}_npix-4096_{num}_mask.fits")
             
                 this_data1 = this_data[(this_data['Z']==outputs[i, 1])]
                 this_name1 = f"{name}_{num}"
         
                 ts = ThumbStack(this_data1, 
-                                mapped, 
+                                ggc, 
                                 masked, 
                                 name=this_name1,
                                 nameLong=None, 
                                 save=True,
                                 nProc=32,
-                                filterTypes='ringring2',
+                                filterTypes=self.capFilter,
                                 #doMBins=False, 
                                 doBootstrap=True,
                                 # doStackedMap=True,
@@ -212,17 +230,17 @@ class individualWeightedPlot(object):
                 this_data1['profile']=np.loadtxt('output/thumbstack/'+this_name1+'/ringring2_filtmap.txt')*(180*60/np.pi)**2
                 this_data1.write('output/thumbstack/'+this_name1+'/objTable.fits', overwrite=True)
         
-                gen = Table.read(tableName+'wProfiles.fits', overwrite=True)
+                gen = Table.read(name+'wProfiles.fits')
                 merged_table = vstack([gen, this_data1])
         
-                merged_table.write(tableName+'wProfiles.fits', overwrite=True)
+                merged_table.write(name+'wProfiles.fits', overwrite=True)
 
         return merged_table
 
 
     def plotIndivWeight(self, filt=True, r=np.array([2. , 2.5, 3. , 3.5, 4. , 4.5, 5. , 5.5, 6. ])):
         dd=self.table
-        path=self.name
+        path=self.outName
 
         if filt:
             dd=dd[dd['filt']==True]
