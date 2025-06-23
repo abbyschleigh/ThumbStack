@@ -17,7 +17,7 @@ from thumbstack import ThumbStack
 
 class individualWeightedPlot(object):
 
-    def __init__(self, tableName, outName='50n_max0.7', capFilter='ringring2', resolution=1., split=True, save=False, tsCompute=False, outputFile='outputs.txt', mapPath='tsz', maskPath='masks', zLim=0.7):
+    def __init__(self, tableName, outName, capFilter='ringring2', resolution=1., split=True, save=False, tsCompute=False, outputFile='outputs.txt', mapPath='tsz', maskPath='masks', zLim=0.7):
         
         self.outName = outName
         self.output = np.loadtxt(outputFile)
@@ -99,7 +99,7 @@ class individualWeightedPlot(object):
         name = self.outName
 
         blank=Table()
-        blank.write(name+'wProfiles.fits', overwrite=True)
+        blank.write(name+'_wProfiles.fits', overwrite=True)
 
         this_data=self.table
 
@@ -142,9 +142,9 @@ class individualWeightedPlot(object):
                                 #cmbUnitLatex=cmap.unitLatex,
                                 pathOut='')
         
-                filtered1=(ts.catalogMask(overlap=True, psMask=False, filterType='ringring2')).tolist()
+                filtered1=(ts.catalogMask(overlap=True, psMask=False, filterType=self.capFilter)).tolist()
                 this_data1['filt']=filtered1
-                this_data1['profile']=np.loadtxt('output/thumbstack/'+this_name1+'/ringring2_filtmap.txt')*(180*60/np.pi)**2
+                this_data1['profile']=np.loadtxt('output/thumbstack/'+this_name1+'/'+self.capFilter+'_filtmap.txt')*(180*60/np.pi)**2
                 this_data1.write('output/thumbstack/'+this_name1+'/objTable.fits', overwrite=True)
                 
                 ts = ThumbStack(this_data2, 
@@ -163,17 +163,17 @@ class individualWeightedPlot(object):
                                 #cmbUnitLatex=cmap.unitLatex,
                                 pathOut='')
                 
-                filtered2=(ts.catalogMask(overlap=True, psMask=False, filterType='ringring2')).tolist()
+                filtered2=(ts.catalogMask(overlap=True, psMask=False, filterType=self.capFilter)).tolist()
                 this_data2['filt']=filtered2
-                this_data2['profile']=np.loadtxt('output/thumbstack/'+this_name2+'/ringring2_filtmap.txt')*(180*60/np.pi)**2
+                this_data2['profile']=np.loadtxt('output/thumbstack/'+this_name2+'/'+self.capFilter+'_filtmap.txt')*(180*60/np.pi)**2
                 this_data2.write('output/thumbstack/'+this_name2+'/objTable.fits', overwrite=True)
         
-                gen = Table.read(name+'wProfiles.fits')
+                gen = Table.read(name+'_wProfiles.fits')
                 
                 both = vstack([this_data1, this_data2])
                 merged_table = vstack([gen, both])
         
-                merged_table.write(name+'wProfiles.fits', overwrite=True)
+                merged_table.write(name+'_wProfiles.fits', overwrite=True)
 
         return merged_table
 
@@ -184,7 +184,7 @@ class individualWeightedPlot(object):
         name = self.outName
 
         blank=Table()
-        blank.write(name+'wProfiles.fits', overwrite=True)
+        blank.write(name+'_wProfiles.fits', overwrite=True)
 
         this_data=self.table
 
@@ -225,15 +225,15 @@ class individualWeightedPlot(object):
                                 #cmbUnitLatex=cmap.unitLatex,
                                 pathOut='')
         
-                filtered1=(ts.catalogMask(overlap=True, psMask=False, filterType='ringring2')).tolist()
+                filtered1=(ts.catalogMask(overlap=True, psMask=False, filterType=self.capFilter)).tolist()
                 this_data1['filt']=filtered1
-                this_data1['profile']=np.loadtxt('output/thumbstack/'+this_name1+'/ringring2_filtmap.txt')*(180*60/np.pi)**2
+                this_data1['profile']=np.loadtxt('output/thumbstack/'+this_name1+'/'+self.capFilter+'_filtmap.txt')*(180*60/np.pi)**2
                 this_data1.write('output/thumbstack/'+this_name1+'/objTable.fits', overwrite=True)
         
-                gen = Table.read(name+'wProfiles.fits')
+                gen = Table.read(name+'_wProfiles.fits')
                 merged_table = vstack([gen, this_data1])
         
-                merged_table.write(name+'wProfiles.fits', overwrite=True)
+                merged_table.write(name+'_wProfiles.fits', overwrite=True)
 
         return merged_table
 
