@@ -385,3 +385,262 @@ def snr(name):
     v=np.dot(prof,m)
     
     return np.sqrt(np.dot(v,prof))
+
+########################################################## boxey_feedback
+
+# still need to add weights = mass as an option in the code.
+def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxPlot=False, name='test'):
+    '''
+    Input:
+    
+        table (astropy.table): astropy table that has property cuts made to it already. 
+        n_boxes (int): number of boxes for the data to split into on the redshift and mass distribution
+        weights (string): 
+            'uniform': uniform weighting system; weights are defined by np.ones
+            'mass': mass weighting system; more massive objects have more weight than less massive objects
+        splitMethod (string): each box is split into high and low feedback via their log(m) by log(sfr/m) distributions
+            'fit': best fit line made by log(m) distribution, then the split is defined by positive or negative difference from the best fit line
+            'median': horizontal split based on the median values of log(sfr/m)
+        boxPlot (bool): print what the boxed redshift v mass distribution
+
+    Output:
+
+        covariance, chi2
+    '''
+
+    ### check if the input are allowed inputs
+    weights_allowed = ['uniform', 'mass']
+    splitMethod_allowed = ['fit', 'median']
+    
+    if weights not in weights_allowed:
+        raise ValueError(f"Invalid weights input: '{weights}'. Must be one of {weights_allowed}.")
+
+    if splitMethod not in splitMethod_allowed:
+        raise ValueError(f"Invalid split_method input: '{splitMethod}'. Must be one of {splitMethod_allowed}.")
+
+    if type(n_boxes) is not int:
+        raise ValueError(f"Invalid n_boxes input type: '{n_boxes}'. Must be an integer.")
+
+    ###
+
+    '''
+    Splitting
+    '''
+    data = np.vstack((table['Z'], table['LOGM'])).T
+    
+    # k-means to group into `n_boxes` clusters
+    centroids, _ = kmeans(data, n_boxes)
+    labels, _ = vq(data, centroids)
+    
+    boxes = {}
+    for i in range(n_boxes):
+        mask = labels == i
+        box_data = data[mask]
+        boxes[i] = {
+            'z': box_data[:, 0],
+            'logm': box_data[:, 1],
+            'center': centroids[i]
+    }
+
+    if boxPlot:
+        fig, ax = plt.subplots()
+        scatter = ax.scatter(x, y, c=labels, cmap=f'tab{n_boxes}', s=0.1)
+        
+        # Show box centers and draw boundaries (approximate as circles)
+        for i in range(n_boxes):
+            cx, cy = boxes[i]['center']
+            ax.plot(cx, cy, 'kx', markersize=12)
+            ax.text(cx, cy, f'Box {i}', fontsize=10, ha='center', va='center', bbox=dict(facecolor='white', alpha=0.6))
+        
+        ax.set_title('Scatter Plot with Clustered Boxes')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        plt.grid(True)
+        plt.savefig(f'{name}_box_splits.pdf')
+        plt.close()
+
+    '''
+    Save box number to table and split into high and low feedback groups for every box
+    '''
+    completed=Table()
+    completed.write(f'{name}_boxes.fits', overwrite=True)
+    
+    for i in range(len(boxes)):
+        mask = list(zip(table['Z'], table['LOGM']))  # List of (x, y) from table
+        targets = set(zip(boxes[i]['z'], boxes[i]['logm']))  # Set of target (x, y)
+        
+        matched = table[[pair in targets for pair in mask]]
+        matched['box']=i
+
+        dd = matched[matched['LOGM'].argsort()]
+        v=dd['LOGSFR']-dd['LOGM']
+        A = np.polyfit(dd['LOGM'], v, 2)
+        pp = np.poly1d(A)
+        ff=v-pp(dd['LOGM'])
+        
+        dd['fdb']=ff
+        dd['sfr/m']=v
+
+        if splitMethod == 'fit':
+            mea = np.median(dd['fdb'])
+            lo=dd[dd['fdb']>=mea] #low
+            hi=dd[dd['fdb']<mea] #high
+
+        if splitMethod == 'median':
+            mea = np.median(10**dd['sfr/m'])
+            lo=dd[dd['sfr/m']>=np.log10(mea)] #low
+            hi=dd[dd['sfr/m']<np.log10(mea)] #high
+
+        lo['split']='low'
+        hi['split']='high'
+
+        merge = vstack([lo, hi])
+
+        gen = Table.read(f'{name}_boxes.fits')
+        merged_table = vstack([gen, merge])
+        
+        merged_table.write(f'{name}_boxes.fits', overwrite=True)
+
+    '''
+    Make high and low splits equal
+    '''
+
+    def match_table_lengths(table1, table2, seed=None):
+        """
+        Randomly removes rows from the longer table so both tables have equal length.
+    
+        Parameters:
+        -----------
+        table1 : astropy.table.Table
+            The first input table.
+        table2 : astropy.table.Table
+            The second input table.
+        seed : int, optional
+            Random seed for reproducibility.
+    
+        Returns:
+        --------
+        new_table1 : astropy.table.Table
+            Table 1 after possible truncation.
+        new_table2 : astropy.table.Table
+            Table 2 after possible truncation.
+        """
+        if seed is not None:
+            np.random.seed(seed)
+    
+        len1 = len(table1)
+        len2 = len(table2)
+    
+        if len1 == len2:
+            return table1, table2
+    
+        if len1 > len2:
+            indices_to_keep = np.random.choice(len1, len2, replace=False)
+            new_table1 = table1[sorted(indices_to_keep)]
+            return new_table1, table2
+        else:
+            indices_to_keep = np.random.choice(len2, len1, replace=False)
+            new_table2 = table2[sorted(indices_to_keep)]
+            return table1, new_table2
+
+    low, high = match_table_lengths(merged_table[merged_table['split']=='low'], merged_table[merged_table['split']=='high'])
+
+    '''
+    Jackknife and Cov
+    '''
+    def jackknife_weighted_mean_cov_fast(X1, w1, X2, w2):
+        """
+        Fast jackknife estimation of weighted mean and its covariance.
+    
+        Parameters:
+            X1: (n_samples, d1)
+            w1: (n_samples,)
+            X2: (n_samples, d2)
+            w2: (n_samples,)
+    
+        Returns:
+            mean1: (d1,)
+            mean2: (d2,)
+            cov11: (d1, d1) covariance of mean1
+            cov22: (d2, d2) covariance of mean2
+            cov12: (d1, d2) cross-covariance between mean1 and mean2
+        """
+        n = X1.shape[0]
+        d1 = X1.shape[1]
+        d2 = X2.shape[1]
+    
+        # Normalize weights once
+        w1 = w1 / np.sum(w1)
+        w2 = w2 / np.sum(w2)
+    
+        # Compute full means
+        mean1 = X1.T @ w1  # shape (d1,)
+        mean2 = X2.T @ w2  # shape (d2,)
+    
+        # Precompute full weighted sums
+        S1 = X1.T * w1     # (d1, n)
+        S2 = X2.T * w2     # (d2, n)
+    
+        # Leave-one-out weighted sums (efficient)
+        total_w1 = np.sum(w1)
+        total_w2 = np.sum(w2)
+    
+        sum1 = np.sum(S1, axis=1, keepdims=True) - S1  # (d1, n)
+        sum2 = np.sum(S2, axis=1, keepdims=True) - S2  # (d2, n)
+    
+        w1_loo = total_w1 - w1  # (n,)
+        w2_loo = total_w2 - w2  # (n,)
+    
+        # LOO means: shape (n, d1) and (n, d2)
+        jk_mean1 = (sum1 / w1_loo).T  # (n, d1)
+        jk_mean2 = (sum2 / w2_loo).T  # (n, d2)
+    
+        # Mean of jackknife means
+        mean_jk1 = np.mean(jk_mean1, axis=0)
+        mean_jk2 = np.mean(jk_mean2, axis=0)
+    
+        # Demeaned jackknife means
+        diff1 = jk_mean1 - mean_jk1  # (n, d1)
+        diff2 = jk_mean2 - mean_jk2  # (n, d2)
+    
+        # Jackknife covariance of the mean
+        cov11 = (n - 1) / n * diff1.T @ diff1  # (d1, d1)
+        cov22 = (n - 1) / n * diff2.T @ diff2  # (d2, d2)
+        cov12 = (n - 1) / n * diff1.T @ diff2  # (d1, d2)
+    
+        return mean1, mean2, cov11, cov22, cov12
+
+
+    if weights == 'uniform':
+        m1,m2,c11,c22,c12=jackknife_weighted_mean_cov_fast(low['profile_ringring2'], np.ones(len(low)), 
+                                                           high['profile_ringring2'], np.ones(len(high)))
+
+    '''
+    Plot
+    '''
+    r=np.array([2. , 2.5, 3. , 3.5, 4. , 4.5, 5. , 5.5, 6. ])
+
+    plt.errorbar(r, m1, yerr=np.diag(c11)**0.5, label='low feedback')
+    plt.errorbar(r, m2, yerr=np.diag(c22)**0.5, label='high feedback')
+    
+    plt.axhline(y=0, color='black', linewidth=1, linestyle='--')
+    plt.xlabel(r'$R$ [arcmin]')
+    plt.ylabel(r'$T$ [$\mu K\cdot\mathrm{arcmin}^2$]')
+    plt.title(f'Profile')
+    plt.legend()
+    
+    plt.savefig(f'{name}_profile.pdf', bbox_inches='tight')
+    
+    #plt.show()
+    plt.close()
+
+    '''
+    Cov and Chi2
+    '''
+    c_d = c11+c22-c12- c12.T
+    np.savetxt(f'{name}_covariance.txt', c_d)
+
+    chi=np.dot(np.dot((m1-m2),np.linalg.inv(c_d)), (m1-m2))
+    np.savetxt(f'{name}_chi2.txt', np.array([chi]))
+    
+    return c_d, chi
