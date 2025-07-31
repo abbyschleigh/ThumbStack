@@ -10,6 +10,10 @@ from thumbstack import ThumbStack
 from astropy.table import Table
 import astropy
 from astropy import units as u
+import matplotlib.pyplot as plt
+import pandas as pd
+from astropy.table import Table, vstack
+from scipy.cluster.vq import kmeans, vq
 
 from pixell import enmap, enplot, reproject, utils, curvedsky 
 import numpy as np
