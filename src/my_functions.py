@@ -392,20 +392,24 @@ def snr(name):
 
 ########################################################## boxey_feedback
 
-# still need to add weights = mass as an option in the code.
-def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxPlot=False, name='test'):
+# resulting plots can be found in directory boxed_script/{name}
+def boxey_feedback(table, n_boxes, frequency, filterType, weights='uniform', splitMethod='median', boxPlot=False, name='test'):
     '''
     Input:
     
         table (astropy.table): astropy table that has property cuts made to it already. 
         n_boxes (int): number of boxes for the data to split into on the redshift and mass distribution
+        frequency (string): 150ghz, 90ghz, kappa
+        filterType (string): ringring2, ring
         weights (string): 
             'uniform': uniform weighting system; weights are defined by np.ones
             'mass': mass weighting system; more massive objects have more weight than less massive objects
         splitMethod (string): each box is split into high and low feedback via their log(m) by log(sfr/m) distributions
             'fit': best fit line made by log(m) distribution, then the split is defined by positive or negative difference from the best fit line
             'median': horizontal split based on the median values of log(sfr/m)
+            'aglum': split based on median of agnlum, high and low values.
         boxPlot (bool): print what the boxed redshift v mass distribution
+        name (string): output name
 
     Output:
 
@@ -414,7 +418,7 @@ def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxP
 
     ### check if the input are allowed inputs
     weights_allowed = ['uniform', 'mass']
-    splitMethod_allowed = ['fit', 'median']
+    splitMethod_allowed = ['fit', 'median', 'agnlum']
     
     if weights not in weights_allowed:
         raise ValueError(f"Invalid weights input: '{weights}'. Must be one of {weights_allowed}.")
@@ -427,12 +431,22 @@ def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxP
 
     ###
 
+    os.makedirs(f'boxed_script/{name}', exist_ok=True)
+
+    if weights == 'mass':
+        calculated_weights = 10**table['LOGM'] / np.sum(10**table['LOGM'])
+        table['mass_weights'] = calculated_weights
+
+    table = table[table[f'catmask_{filterType}_{frequency}']==True]
+
     '''
     Splitting
     '''
     data = np.vstack((table['Z'], table['LOGM'])).T
     
     # k-means to group into `n_boxes` clusters
+
+    print(f'making boxes')
     centroids, _ = kmeans(data, n_boxes)
     labels, _ = vq(data, centroids)
     
@@ -448,7 +462,7 @@ def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxP
 
     if boxPlot:
         fig, ax = plt.subplots()
-        scatter = ax.scatter(x, y, c=labels, cmap=f'tab{n_boxes}', s=0.1)
+        scatter = ax.scatter(table['Z'], table['LOGM'], c=labels, cmap=f'tab20', s=0.1)
         
         # Show box centers and draw boundaries (approximate as circles)
         for i in range(n_boxes):
@@ -457,17 +471,17 @@ def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxP
             ax.text(cx, cy, f'Box {i}', fontsize=10, ha='center', va='center', bbox=dict(facecolor='white', alpha=0.6))
         
         ax.set_title('Scatter Plot with Clustered Boxes')
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
+        ax.set_xlabel('Z')
+        ax.set_ylabel('LOGM')
         plt.grid(True)
-        plt.savefig(f'{name}_box_splits.pdf')
+        plt.savefig(f'boxed_script/{name}/boxey_plot.png', bbox_inches='tight')
         plt.close()
 
     '''
     Save box number to table and split into high and low feedback groups for every box
     '''
     completed=Table()
-    completed.write(f'{name}_boxes.fits', overwrite=True)
+    completed.write(f'boxed_script/{name}/{name}_boxes.fits', overwrite=True)
     
     for i in range(len(boxes)):
         mask = list(zip(table['Z'], table['LOGM']))  # List of (x, y) from table
@@ -478,14 +492,15 @@ def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxP
 
         dd = matched[matched['LOGM'].argsort()]
         v=dd['LOGSFR']-dd['LOGM']
-        A = np.polyfit(dd['LOGM'], v, 2)
-        pp = np.poly1d(A)
-        ff=v-pp(dd['LOGM'])
-        
-        dd['fdb']=ff
         dd['sfr/m']=v
 
         if splitMethod == 'fit':
+            A = np.polyfit(dd['LOGM'], v, 2)
+            pp = np.poly1d(A)
+            ff=v-pp(dd['LOGM'])
+            
+            dd['fdb']=ff
+            
             mea = np.median(dd['fdb'])
             lo=dd[dd['fdb']>=mea] #low
             hi=dd[dd['fdb']<mea] #high
@@ -495,15 +510,20 @@ def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxP
             lo=dd[dd['sfr/m']>=np.log10(mea)] #low
             hi=dd[dd['sfr/m']<np.log10(mea)] #high
 
+        if splitMethod == 'agnlum':
+            mea = np.median(dd['AGNLUM'])
+            lo=dd[dd['AGNLUM']<mea] #low
+            hi=dd[dd['AGNLUM']>=mea] #high
+
         lo['split']='low'
         hi['split']='high'
 
         merge = vstack([lo, hi])
 
-        gen = Table.read(f'{name}_boxes.fits')
+        gen = Table.read(f'boxed_script/{name}/{name}_boxes.fits')
         merged_table = vstack([gen, merge])
         
-        merged_table.write(f'{name}_boxes.fits', overwrite=True)
+        merged_table.write(f'boxed_script/{name}/{name}_boxes.fits', overwrite=True)
 
     '''
     Make high and low splits equal
@@ -616,16 +636,27 @@ def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxP
 
 
     if weights == 'uniform':
-        m1,m2,c11,c22,c12=jackknife_weighted_mean_cov_fast(low['profile_ringring2'], np.ones(len(low)), 
-                                                           high['profile_ringring2'], np.ones(len(high)))
+        m1,m2,c11,c22,c12=jackknife_weighted_mean_cov_fast(low[f'profile_{filterType}_{frequency}'], np.ones(len(low)), 
+                                                           high[f'profile_{filterType}_{frequency}'], np.ones(len(high)))
+
+    if weights == 'mass':
+        m1,m2,c11,c22,c12=jackknife_weighted_mean_cov_fast(low[f'profile_{filterType}_{frequency}'], low['mass_weights'], 
+                                                           high[f'profile_{filterType}_{frequency}'], high['mass_weights'])
 
     '''
     Plot
     '''
     r=np.array([2. , 2.5, 3. , 3.5, 4. , 4.5, 5. , 5.5, 6. ])
 
-    plt.errorbar(r, m1, yerr=np.diag(c11)**0.5, label='low feedback')
-    plt.errorbar(r, m2, yerr=np.diag(c22)**0.5, label='high feedback')
+    if splitMethod == 'agnlum':
+        plt.errorbar(r, m1, yerr=np.diag(c11)**0.5, 
+                     label=f"{'{:.2e}'.format(min(low['AGNLUM']))} < AGNLUM < {'{:.2e}'.format(max(low['AGNLUM']))} | low")
+        plt.errorbar(r, m2, yerr=np.diag(c22)**0.5, 
+                     label=f"{'{:.2e}'.format(min(high['AGNLUM']))} < AGNLUM < {'{:.2e}'.format(max(high['AGNLUM']))} | high")
+        
+    else:
+        plt.errorbar(r, m1, yerr=np.diag(c11)**0.5, label='low feedback')
+        plt.errorbar(r, m2, yerr=np.diag(c22)**0.5, label='high feedback')
     
     plt.axhline(y=0, color='black', linewidth=1, linestyle='--')
     plt.xlabel(r'$R$ [arcmin]')
@@ -633,18 +664,24 @@ def boxey_feedback(table, n_boxes, weights='uniform', splitMethod='median', boxP
     plt.title(f'Profile')
     plt.legend()
     
-    plt.savefig(f'{name}_profile.pdf', bbox_inches='tight')
+    plt.savefig(f'boxed_script/{name}/{name}_profile.png', bbox_inches='tight')
     
     #plt.show()
     plt.close()
 
     '''
+    Save radius, mean, and error plots
+    '''
+    np.savetxt(f'boxed_script/{name}/{name}_profile_lowf.txt', np.column_stack((r, m1, np.diag(c11)**0.5)), delimiter="\t")
+    np.savetxt(f'boxed_script/{name}/{name}_profile_highf.txt', np.column_stack((r, m2, np.diag(c22)**0.5)), delimiter="\t")
+
+    '''
     Cov and Chi2
     '''
     c_d = c11+c22-c12- c12.T
-    np.savetxt(f'{name}_covariance.txt', c_d)
+    np.savetxt(f'boxed_script/{name}/{name}_covariance.txt', c_d)
 
     chi=np.dot(np.dot((m1-m2),np.linalg.inv(c_d)), (m1-m2))
-    np.savetxt(f'{name}_chi2.txt', np.array([chi]))
+    np.savetxt(f'boxed_script/{name}/{name}_chi2.txt', np.array([chi]))
     
     return c_d, chi
